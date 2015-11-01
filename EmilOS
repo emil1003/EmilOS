@@ -516,4 +516,4 @@ while true do
 		drawMain()
 		bPopup = framework.message("EmilOS","Server ikke","tilgaengelig",true)
 	end
-end
+end 
