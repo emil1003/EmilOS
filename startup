@@ -1,0 +1,134 @@
+ --EmilOS (Login Program)
+local version = 1.2
+ --(c) 2015 Emil Inc. All Rights Reserved.
+ 
+ --Locals
+local popupColor = colors.lime
+local popupTitle = "EmilOS"
+local tries = 0
+
+ --Load EmilWorks
+if fs.exists("System/emilworks") then
+	os.loadAPI("System/emilworks")
+else
+	print("EmilWorks is missing")
+	return
+end
+
+ --Load settings file
+if fs.exists("System") then
+	if fs.exists("System/settings") then
+		file = fs.open("System/settings","r")
+		settings = textutils.unserialize(file.readAll())
+		file.close()
+		if settings == nil then
+			settings = {}
+			firstTime = true
+		end
+	elseif fs.exists("System/oldSettings") then
+		file = fs.open("System/oldSettings","r")
+		settings = textutils.unserialize(file.readAll())
+		file.close()
+		firstTime = true
+		updated = true
+	else
+		settings = {}
+		firstTime = true
+	end
+end
+if not settings.background then
+	settings.background = "gray"
+end
+
+ --If first time
+if firstTime then
+	emilworks.popupMsg(popupColor,"3",popupTitle,"Velkommen til EmilOS!","Klik for at starte")
+	os.pullEvent("mouse_click")
+	if updated then
+		if emilworks.popupMsg(popupColor,"6",popupTitle,"Importer gamle","indstillinger?") then
+			file = fs.open("System/settings","w")
+			file.write(textutils.serialize(settings))
+			file.close()
+			emilworks.popupMsg(popupColor,"3",popupTitle,"EmilOS er nu opdateret!","Systemet vil nu","genstarte")
+			fs.delete("System/oldSettings")
+			sleep(2)
+			os.reboot()
+		else
+			settings = {}
+		end
+	end
+	local name = emilworks.popupMsg(popupColor,"4",popupTitle,"Hvad er dit navn?")
+	local password = emilworks.popupMsg(popupColor,"5",popupTitle,"Vaelg et kodeord","(Tom for ingen kode)")
+	settings.user = name
+	if password:len() >= 1 then
+		settings.password = emilworks.hash(password)
+	end
+	if emilworks.popupMsg(popupColor,"6",popupTitle,"Skift Server URL?") then
+		settings.serverUrl = emilworks.popupMsg(popupColor,"4",popupTitle,"Skriv Server URL")
+	else
+		settings.serverUrl = "37.97.2.195"
+	end
+	settings.fullClock = not emilworks.popupMsg(popupColor,"6",popupTitle,"Brug 12-Timers Ur?")
+	settings.background = "gray"
+	file = fs.open("System/settings","w")
+	file.write(textutils.serialize(settings))
+	file.close()
+	os.setComputerLabel(settings.user.."'s Computer")
+	emilworks.popupMsg(popupColor,"3",popupTitle,"Setup er faerdig!","Systemet vil nu","genstarte")
+	if fs.exists("System/oldSettings") then
+		fs.delete("System/oldSettings")
+	end
+	sleep(2)
+	os.reboot()
+end
+
+local oldPullEvent = os.pullEvent
+os.pullEvent = os.pullEventRaw
+
+while true do
+	if settings.password ~= nil then
+		local input = emilworks.popupMsg(popupColor,"5",popupTitle,"Indtast Kodeord")
+		if emilworks.hash(input) == settings.password then
+			emilworks.popupMsg(popupColor,"3",popupTitle,"Velkommen, "..settings.user.."!")
+			sleep(2)
+			emilworks.clear()
+			os.pullEvent = oldPullEvent
+			shell.run("EmilOS")
+		elseif input == "adminResetSettings" then
+			fs.delete("System/settings")
+			os.reboot()
+		else
+			emilworks.popupMsg(colors.red,"3",popupTitle,"Kodeord er forkert!")
+			sleep(1)
+			tries = tries + 1
+			if tries == 5 then
+				local timeLeft = 60
+				emilworks.popupMsg(popupColor,"3",popupTitle,"Computer er laast","Vent ")
+				while true do
+					term.setCursorPos(19,8)
+					term.setTextColor(colors.black)
+					term.setBackgroundColor(colors.white)
+					write(timeLeft.." sekunder ")
+					timeLeft = timeLeft - 1
+					sleep(1)
+					if timeLeft == 0 then
+						os.reboot()
+					end
+				end
+			end
+		end
+	else
+		emilworks.popupMsg(popupColor,"3",popupTitle,"Velkommen, "..settings.user.."!")
+		sleep(2)
+		emilworks.clear()
+		os.pullEvent = oldPullEvent
+		_, bSuccess = pcall(shell.run("EmilOS"))
+		if bSuccess then
+			os.shutdown()
+		else
+			emilworks.popupMsg(popupColor,"3",popupTitle,"En fejl opstod.","Systemet vil nu","genstarte")
+			sleep(3)
+			os.reboot()
+		end
+	end
+end
