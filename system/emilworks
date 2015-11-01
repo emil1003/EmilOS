@@ -137,18 +137,6 @@ function popupMsg(color, mode, title, text1, text2, text3, text4)
 		error("Error in Mode")
 	end
 end
-function clear()
-	term.setBackgroundColor(colors.black)
-	term.clear()
-	term.setTextColor(colors.white)
-	term.setCursorPos(1,1)
-end
-function version()
-	return "1.1"
-end
-function functions()
-	return "popupMsg, splitString, serverCall, hash"
-end
 function hash(string)
 	os.loadAPI("System/sha")
 	hash = sha.sha256(string)
