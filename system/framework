@@ -1,0 +1,183 @@
+ --EmilOS Framework
+local version = 1.2
+ --(c) 2015 Emil Inc. All Rights Reserved.
+
+function menu(entries,disabled,bClock)
+	local lL = 0
+	local buttonY = {}
+	if bClock then
+		setFile = fs.open("System/settings","r")
+		settings = textutils.unserialize(setFile.readAll())
+		setFile.close()
+	end
+	if disabled == nil then
+		disabled = {}
+	end
+	for k,v in pairs(entries) do
+		if v:len() >= lL then
+			lL = v:len()
+		end
+	end
+	for i=1,#entries + 1 do
+		paintutils.drawLine(2,i + 1,lL + 3,i + 1,colors.white)
+		menuL = i
+	end
+	for i=1,#entries do
+		if disabled[i] == true then
+			term.setTextColor(colors.lightGray)
+			term.setCursorPos(3,i + 1)
+			print(entries[i])
+		elseif entries[i] == "br" then
+			term.setTextColor(colors.lightGray)
+			term.setCursorPos(2,i + 1)
+			for i=1,lL + 2 do
+				write("-")
+			end
+		else
+			term.setTextColor(colors.black)
+			term.setCursorPos(3,i + 1)
+			print(entries[i])
+			buttonY[i] = i + 1
+		end
+	end
+	paintutils.drawLine(3,menuL + 2,lL + 4,menuL + 2,colors.black)
+	paintutils.drawLine(lL + 4,2,lL + 4,menuL + 2,colors.black)
+	term.setTextColor(colors.white)
+	while true do
+		e, but, cx, cy = eventHandler()
+		if e == "mouse_click" then
+			for i=1,#entries do
+				if cx >= 2 and cx <= lL + 3 and cy == buttonY[i] then
+					term.setTextColor(colors.white)
+					paintutils.drawLine(2,i + 1,lL + 3,i + 1,colors.lightBlue)
+					term.setCursorPos(3,i + 1)
+					write(entries[i])
+					sleep(0.2)
+					return i
+				end
+			end
+			if cy == 1 then
+				os.queueEvent("mouse_click",but,cx,cy)
+			end
+			return "close"
+		elseif e == "key" and but == keys.leftCtrl then
+			return "close"
+		end
+	end
+end
+function startClock()
+	ClockID = os.startTimer(1)
+	return ClockID
+end
+function httpRequest(par1,par2,par3)
+	_G.isGettingData = true
+	http.request(par1,par2,par3)
+end
+function clearPopup()
+	frameworkPopup = false
+	if popupTimerID then
+		if os.cancelAlarm then
+			os.cancelAlarm(popupTimerID)
+		end
+	end
+end
+function eventHandler(doClock,forceSetLoad)
+	if not frameworkSetIsLoaded or forceSetLoad then
+		file = fs.open("System/settings","r")
+		settings = textutils.unserialize(file.readAll())
+		file.close()
+		frameworkSetIsLoaded = true
+		if forceSetLoad then
+			return true
+		end
+	end
+	ClockID = startClock()
+	while true do
+		e, par1, par2, par3 = os.pullEvent()
+		if e == "timer" and par1 == ClockID and doClock then 
+			paintutils.drawLine(30,1,48,1,colors.white)
+			term.setCursorPos(48 - textutils.formatTime(os.time(),settings.fullClock):len(),1)
+			term.setBackgroundColor(colors.white)
+			term.setTextColor(colors.black)
+			write(textutils.formatTime(os.time(),settings.fullClock))
+			ClockID = startClock()
+		elseif e == "alarm" and par1 == popupTimerID and frameworkPopup then
+			frameworkPopup = false
+			if os.cancelAlarm then
+				os.cancelAlarm(popupTimerID)
+			end
+			return "framework_redraw"
+		elseif e == "mouse_click" and par2 >= 36 and par3 >= 3 and par3 <= 8 and frameworkPopup then
+			if par2 == 50 and par3 == 4 then
+				frameworkPopup = false
+				if os.cancelAlarm then
+					os.cancelAlarm(popupTimerID)
+				end
+				return "framework_redraw"
+			elseif isAssociatedApp then
+				frameworkPopup = false
+				if os.cancelAlarm then
+					os.cancelAlarm(popupTimerID)
+				end
+				shell.run(isAssociatedApp)
+				return "framework_redraw"
+			end
+		elseif e == "http_success" or e == "http_failure" then
+			_G.isGettingData = false
+			return e, par1, par2
+		else
+			return e, par1, par2, par3
+		end
+	end
+end
+function message(title,textLine1,textLine2,doPopup,associatedApp)
+	if fs.exists("System/messages") then
+		file = fs.open("System/messages","r")
+		messages = textutils.unserialize(file.readAll())
+		file.close()
+	else
+		messages = {}
+	end
+	messages[title] = {["title"]=title,["textLine1"]=textLine1,["textLine2"]=textLine2}
+	file = fs.open("System/messages","w")
+	file.write(textutils.serialize(messages))
+	file.close()
+	if doPopup then
+		for i=3,8 do
+			paintutils.drawLine(36,i,51,i,colors.lightGray)
+		end
+		term.setTextColor(colors.white)
+		term.setCursorPos(37,4)
+		write(title)
+		term.setCursorPos(50,4)
+		write("X")
+		term.setCursorPos(37,6)
+		write(textLine1)
+		term.setCursorPos(37,7)
+		write(textLine2)
+		popupTimerID = os.setAlarm(os.time() + 0.12)
+		frameworkPopup = true
+		if associatedApp then
+			if fs.exists(associatedApp) then
+				isAssociatedApp = associatedApp
+			end
+		end
+		return true
+	end
+end
+function messageHandler(mode)
+	if mode == "load" then
+		if fs.exists("System/messages") then
+			file = fs.open("System/messages","r")
+			messages = textutils.unserialize(file.readAll())
+			file.close()
+		else
+			messages = {}
+		end
+		return messages
+	elseif mode == "save" then
+		file = fs.open("System/messages","w")
+		file.write(textutils.serialize(messages))
+		file.close()
+	end
+end
