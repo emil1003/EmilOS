@@ -243,41 +243,9 @@ function openSidebar(bSidebarIsOpen)
 		term.setTextColor(colors.white)
 		term.setCursorPos(38,3)
 		write("Enheder")
-		term.setCursorPos(38,5)
-		write("Bottom:")
-		if peripherals["bottom"] then
-			term.setCursorPos(39,6)
-			write(peripherals["bottom"])
-		end
-		term.setCursorPos(38,7)
-		write("Top:")
-		if peripherals["top"] then
-			term.setCursorPos(39,8)
-			write(peripherals["top"])
-		end
-		term.setCursorPos(38,9)
-		write("Back:")
-		if peripherals["back"] then
-			term.setCursorPos(39,10)
-			write(peripherals["back"])
-		end
-		term.setCursorPos(38,11)
-		write("Front:")
-		if peripherals["front"] then
-			term.setCursorPos(39,12)
-			write(peripherals["front"])
-		end
-		term.setCursorPos(38,13)
-		write("Right:")
-		if peripherals["right"] then
-			term.setCursorPos(39,14)
-			write(peripherals["right"])
-		end
-		term.setCursorPos(38,15)
-		write("Left:")
-		if peripherals["left"] then
-			term.setCursorPos(39,16)
-			write(peripherals["left"])
+		for i=1,#peripherals do
+			term.setCursorPos(38,4 + i)
+			write(peripherals[i])
 		end
 	end
 	term.setCursorPos(41,18)
