@@ -19,12 +19,8 @@ os.loadAPI("System/framework")
 setFile = fs.open("System/settings","r")
 local settings = textutils.unserialize(setFile.readAll())
 setFile.close()
-if settings.productKey then
-	framework.httpRequest("http://"..settings.serverUrl.."/EmilOSScript.php","request=GetAppList1")
-	_G.isActivated = true
-else
-	framework.delayedMessage("EmilOS","EmilOS er ikke","aktiveret",true)
-end
+framework.httpRequest("http://"..settings.serverUrl.."/EmilOSScript.php","request=GetAppList1")
+_G.isActivated = true
 
  --Functions
 local function getInstalledApps()
