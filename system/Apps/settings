@@ -1,0 +1,228 @@
+ --EmilOS Settings App
+local version = 1.2
+ --(c) 2015 Emil Inc. All Rights Reserved.
+ 
+local currentPage = "main"
+
+ --Load settings
+setFile = fs.open("System/settings","r")
+local settings = textutils.unserialize(setFile.readAll())
+setFile.close()
+
+local function makeSelBox(y,width,text,endCh,endChCol)
+	for i=0,width do
+		paintutils.drawLine(3,y + i,49,y + i,colors.white)
+	end
+	term.setCursorPos(4,y + 1)
+	write(text)
+	term.setCursorPos(49 - endCh:len(),y + 1)
+	term.setTextColor(colors[endChCol])
+	write(endCh)
+	term.setTextColor(colors.black)
+end
+local function main()
+	term.setTextColor(colors.black)
+	term.setCursorPos(1,1)
+	term.setBackgroundColor(colors.white)
+	paintutils.drawLine(1,1,51,1,colors.white)
+	term.setCursorPos(3,1)
+	write("Indstillinger")
+	for i=2,19 do
+		paintutils.drawLine(1,i,51,i,colors[settings.background])
+	end
+	if currentPage == "main" then
+		makeSelBox(3,2,"Generelt",">","black")
+		makeSelBox(7,2,"Grafik",">","black")
+		makeSelBox(11,2,"Netvaerk",">","black")
+		makeSelBox(15,2,"Aktivering",">","black")
+	elseif currentPage == "general" then
+		makeSelBox(3,2,"Tilbage","<","black")
+		makeSelBox(7,2,"Navn",settings.user,"black")
+		if settings.password then
+			makeSelBox(11,2,"Adgangskode","Til","lime")
+		else
+			makeSelBox(11,2,"Adgangskode","Fra","red")
+		end
+		if settings.fullClock then
+			makeSelBox(15,2,"12-Timers Ur","Nej","black")
+		else
+			makeSelBox(15,2,"12-Timers Ur","Ja","black")
+		end
+	elseif currentPage == "graphics" then
+		makeSelBox(3,2,"Tilbage","<","black")
+		makeSelBox(7,2,"Baggrund",settings.background,"black")
+		if settings.noAnim then
+			makeSelBox(11,2,"Animationer","Nej","red")
+		else
+			makeSelBox(11,2,"Animationer","Ja","lime")
+		end
+	elseif currentPage == "network" then
+		makeSelBox(3,2,"Tilbage","<","black")
+		if settings.serverUrl == "37.97.2.195" then
+			makeSelBox(7,2,"Server-URL","Standard","black")
+		else
+			makeSelBox(7,2,"Server-URL",settings.serverUrl,"black")
+		end
+	elseif currentPage == "activation" then
+		makeSelBox(3,2,"Tilbage","<","black")
+		makeSelBox(7,2,"Aktiveringskode",settings.productKey or "Ikke aktiveret","black")
+	end
+end
+
+main()
+while true do
+	if clicked then
+		main()
+		file = fs.open("System/settings","w")
+		file.write(textutils.serialize(settings))
+		file.close()
+		clicked = false
+	end
+	e, but, cx, cy = framework.eventHandler()
+	if e == "mouse_click" then
+		if cx >= 2 and cx <= 14 and cy == 1 then
+			term.setCursorPos(2,1)
+			term.setTextColor(colors.white)
+			term.setBackgroundColor(colors.lightBlue)
+			write(" Indstillinger ")
+			cB = framework.menu({"Om Indstillinger","br","Afslut"})
+			if cB == 1 then
+				emilworks.popupMsg(colors.lime,"3","Indstillinger","Indstillinger","Version "..version,"(c) 2015 Emil Inc.")
+				parallel.waitForAny(function() os.pullEvent("mouse_click") end,function() os.pullEvent("key") end)
+			elseif cB == 3 then
+				return
+			end
+			clicked = true
+		end
+		if cx >= 3 and cx <= 49 and cy >= 3 and cy <= 5 then
+			if currentPage == "main" then
+				currentPage = "general"
+			else
+				currentPage = "main"
+			end
+			clicked = true
+		elseif cx >= 3 and cx <= 49 and cy >= 7 and cy <= 9 then
+			if currentPage == "main" then
+				currentPage = "graphics"
+			elseif currentPage == "general" then
+				local newName = emilworks.popupMsg(colors.lime,"4","EmilOS","Skriv nyt navn")
+				if newName:len() >= 1 then
+					settings.user = newName
+				end
+			elseif currentPage == "graphics" then
+				if isActivated then
+					newBack = emilworks.popupMsg(colors.lime,"4","EmilOS","Skriv farve")
+					if colors[newBack] ~= nil then
+						settings.background = newBack
+					else
+						emilworks.popupMsg(colors.lime,"3","EmilOS","Farve findes ikke")
+						sleep(1)
+					end
+				else
+					emilworks.popupMsg(colors.lime,"1","EmilOS","EmilOS er ikke aktiveret")
+				end
+			elseif currentPage == "network" then
+				if isActivated then
+					newUrl = emilworks.popupMsg(colors.lime,"4","EmilOS","Skriv ny Server URL","(Enter for Standard)")
+					if #newUrl >= 1 then
+						settings.serverUrl = newUrl
+					else
+						settings.serverUrl = "37.97.2.195"
+					end
+				else
+					emilworks.popupMsg(colors.lime,"1","EmilOS","EmilOS er ikke aktiveret")
+				end
+			elseif currentPage == "activation" then
+				if not settings.productKey then
+					while true do
+						username = emilworks.popupMsg(colors.lime,"4","EmilOS","Indtast Brugernavn")
+						if username:len() < 1 then
+							break
+						end
+						local password = emilworks.popupMsg(colors.lime,"5","EmilOS","Indtast Adgangskode")
+						emilworks.popupMsg(colors.lime,"3","EmilOS","Vent Venligst...")
+						local a = http.post("http://"..settings.serverUrl.."/login.php","request="..username)
+						if a.readAll() == password then
+							a = nil
+							local a = http.get("http://"..settings.serverUrl.."/data/EmilOSRegister.php?action=checkUser&username="..username)
+							if a then
+								a = a.readAll()
+							end
+							if a == "no_key" then
+								while true do
+									b = emilworks.popupMsg(colors.lime,"4","EmilOS","Indtast produktkode","(10 tal og bogstaver)")
+									if b:len() == 10 then
+										if emilworks.popupMsg(colors.lime,"6","EmilOS","Vil du binde denne","kode til "..username.."?") then
+											emilworks.popupMsg(colors.lime,"3","EmilOS","Vent Venligst...")
+											http.get("http://"..settings.serverUrl.."/data/EmilOSRegister.php?action=register&username="..username.."&key="..b)
+											break
+										end
+									end
+								end
+							elseif a ~= nil then
+								if emilworks.popupMsg(colors.lime,"6","EmilOS","Vil du binde denne","computer til "..username.."?") then
+									b = a
+								else
+									b = nil
+								end
+							else
+								b = nil
+							end
+							if b then
+								settings.productKey = b
+								emilworks.popupMsg(colors.lime,"1","EmilOS","EmilOS er registreret!","Genstart for at","aktivere")
+								break
+							else
+								emilworks.popupMsg(colors.red,"1","EmilOS","EmilOS blev ikke","registreret")
+								break
+							end
+						end
+					end
+				else
+					if emilworks.popupMsg(colors.lime,"6","EmilOS","Vil du deaktivere","EmilOS?") then
+						settings.productKey = nil
+					end
+				end
+			end
+			clicked = true
+		elseif cx >= 3 and cx <= 49 and cy >= 11 and cy <= 13 then
+			if currentPage == "main" then
+				currentPage = "network"
+			elseif currentPage == "general" then
+				if settings.password then
+					oldPass = emilworks.hash(emilworks.popupMsg(colors.lime,"5","EmilOS","Skriv nuvaerende kode"))
+				else
+					oldPass = settings.password
+				end
+				if oldPass == settings.password then
+					newPass = emilworks.popupMsg(colors.lime,"5","EmilOS","Skriv ny Adgangskode","(Enter for ingen kode)")
+					if #newPass >= 1 then
+						settings.password = emilworks.hash(newPass)
+					else
+						settings.password = nil
+					end
+				else
+					emilworks.popupMsg(colors.red,"3","EmilOS","Kode er forkert!")
+					sleep(1)
+				end
+			elseif currentPage == "graphics" then
+				if isActivated then
+					settings.noAnim = not emilworks.popupMsg(colors.lime,"6","EmilOS","Brug animationer?")
+				else
+					emilworks.popupMsg(colors.lime,"1","EmilOS","EmilOS er ikke aktiveret")
+				end
+			end
+			clicked = true
+		elseif cx >= 3 and cx <= 49 and cy >= 15 and cy <= 17 then
+			if currentPage == "main" then
+				currentPage = "activation"
+			elseif currentPage == "general" then
+				settings.fullClock = not emilworks.popupMsg(colors.lime,"6","EmilOS","Brug 12-Timers Ur?")
+			end
+			clicked = true
+		end
+	elseif e == "framework_redraw" then
+		framework.clearPopup()
+		clicked = true
+	end
+end

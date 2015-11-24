@@ -1,5 +1,5 @@
  --EmilOS Framework
-local version = 1.2
+local version = 1.21
  --(c) 2015 Emil Inc. All Rights Reserved.
 
 function menu(entries,disabled,bClock)
@@ -65,23 +65,19 @@ function menu(entries,disabled,bClock)
 		end
 	end
 end
-function startClock()
-	ClockID = os.startTimer(1)
-	return ClockID
-end
 function httpRequest(par1,par2,par3)
 	_G.isGettingData = true
 	http.request(par1,par2,par3)
 end
 function clearPopup()
-	frameworkPopup = false
+	frameworkPopup, _G.bPopup, frameworkPopupName = false, false, nil
 	if popupTimerID then
 		if os.cancelAlarm then
 			os.cancelAlarm(popupTimerID)
 		end
 	end
 end
-function eventHandler(doClock,forceSetLoad)
+function eventHandler(forceSetLoad)
 	if not frameworkSetIsLoaded or forceSetLoad then
 		file = fs.open("System/settings","r")
 		settings = textutils.unserialize(file.readAll())
@@ -91,42 +87,58 @@ function eventHandler(doClock,forceSetLoad)
 			return true
 		end
 	end
-	ClockID = startClock()
+	--local ClockID = os.startTimer(1)
 	while true do
-		e, par1, par2, par3 = os.pullEvent()
-		if e == "timer" and par1 == ClockID and doClock then 
+		if tMessage then
+			message(tMessage[1],tMessage[2],tMessage[3],tMessage[4],tMessage[5])
+			tMessage = nil
+		end
+		e, par1, par2, par3, par4, par5 = os.pullEventRaw()
+		if e == "timer" and par1 == ClockID then
 			paintutils.drawLine(30,1,48,1,colors.white)
 			term.setCursorPos(48 - textutils.formatTime(os.time(),settings.fullClock):len(),1)
 			term.setBackgroundColor(colors.white)
 			term.setTextColor(colors.black)
 			write(textutils.formatTime(os.time(),settings.fullClock))
-			ClockID = startClock()
+			ClockID = os.startTimer(1)
 		elseif e == "alarm" and par1 == popupTimerID and frameworkPopup then
-			frameworkPopup = false
+			frameworkPopup, _G.bPopup, frameworkPopupName = false, false, nil
 			if os.cancelAlarm then
 				os.cancelAlarm(popupTimerID)
 			end
 			return "framework_redraw"
 		elseif e == "mouse_click" and par2 >= 36 and par3 >= 3 and par3 <= 8 and frameworkPopup then
 			if par2 == 50 and par3 == 4 then
-				frameworkPopup = false
+				frameworkPopup, _G.bPopup = false, false
 				if os.cancelAlarm then
 					os.cancelAlarm(popupTimerID)
 				end
+				messages[frameworkPopupName] = nil
+				messageHandler("save")
+				frameworkPopupName = nil
 				return "framework_redraw"
 			elseif isAssociatedApp then
-				frameworkPopup = false
+				frameworkPopup, _G.bPopup = false, false
 				if os.cancelAlarm then
 					os.cancelAlarm(popupTimerID)
 				end
+				frameworkPopupName = nil
 				shell.run(isAssociatedApp)
 				return "framework_redraw"
 			end
 		elseif e == "http_success" or e == "http_failure" then
 			_G.isGettingData = false
 			return e, par1, par2
+		elseif e == "terminate" then
+			term.setTextColor(colors.white)
+			term.setBackgroundColor(colors.black)
+			term.clear()
+			term.setCursorPos(1,1)
+			write("Ended program")
+			term.setCursorPos(1,2)
+			return e
 		else
-			return e, par1, par2, par3
+			return e, par1, par2, par3, par4, par5
 		end
 	end
 end
@@ -150,13 +162,16 @@ function message(title,textLine1,textLine2,doPopup,associatedApp)
 		term.setCursorPos(37,4)
 		write(title)
 		term.setCursorPos(50,4)
-		write("X")
+		write("x")
 		term.setCursorPos(37,6)
 		write(textLine1)
 		term.setCursorPos(37,7)
 		write(textLine2)
+		paintutils.drawLine(37,9,51,9,colors.black)
 		popupTimerID = os.setAlarm(os.time() + 0.12)
 		frameworkPopup = true
+		frameworkPopupName = title
+		_G.bPopup = true
 		if associatedApp then
 			if fs.exists(associatedApp) then
 				isAssociatedApp = associatedApp
@@ -164,6 +179,13 @@ function message(title,textLine1,textLine2,doPopup,associatedApp)
 		end
 		return true
 	end
+end
+function delayedMessage(par1,par2,par3,par4,par5)
+	tMessage = {par1,par2,par3,par4,par5}
+	return true
+end
+function endProgram()
+	os.queueEvent("frameworkCloseProgram")
 end
 function messageHandler(mode)
 	if mode == "load" then
