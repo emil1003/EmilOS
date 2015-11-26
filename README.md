@@ -1,4 +1,4 @@
 # EmilOS
 The EmilOS Project. An easy-to-use and advanced ComputerCraft OS.
 
-Newest release is 1.5.
+Newest release is 1.51.
