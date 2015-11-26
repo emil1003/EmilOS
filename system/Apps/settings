@@ -139,7 +139,7 @@ while true do
 						if username:len() < 1 then
 							break
 						end
-						local password = emilworks.popupMsg(colors.lime,"5","EmilOS","Indtast Adgangskode")
+						local password = emilworks.hash(emilworks.popupMsg(colors.lime,"5","EmilOS","Indtast Adgangskode"))
 						emilworks.popupMsg(colors.lime,"3","EmilOS","Vent Venligst...")
 						local a = http.post("http://"..settings.serverUrl.."/login.php","request="..username)
 						if a.readAll() == password then
