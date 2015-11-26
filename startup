@@ -97,6 +97,7 @@ while true do
 	if settings.password ~= nil then
 		local input = emilworks.popupMsg(popupColor,"5",popupTitle,"Indtast Kodeord")
 		if emilworks.hash(input) == settings.password then
+			break
 		elseif input == "adminResetSettings" then
 			fs.delete("System/settings")
 			os.reboot()
@@ -120,40 +121,42 @@ while true do
 				end
 			end
 		end
+	else
+		break
 	end
-	os.pullEvent = oldPullEvent
-	emilworks.popupMsg(popupColor,"3",popupTitle,"Velkommen, "..settings.user.."!")
-	os.startTimer(2)
-	while true do
-		e, par1, par2 = os.pullEvent()
-		if e == "key" then
-			if par1 == keys.s then
-				term.setBackgroundColor(colors.black)
-				term.clear()
-				term.setTextColor(colors.white)
-				term.setCursorPos(1,1)
-				print(" --- EmilOS Single-User Mode ---")
-				write("Loading APIs...")
-				os.loadAPI("System/emilworks")
-				os.loadAPI("System/framework")
-				sleep(0.2)
-				print("ok")
-				return
-			end
-		elseif e == "timer" then
-			break
+end
+os.pullEvent = oldPullEvent
+emilworks.popupMsg(popupColor,"3",popupTitle,"Velkommen, "..settings.user.."!")
+os.startTimer(2)
+while true do
+	e, par1, par2 = os.pullEvent()
+	if e == "key" then
+		if par1 == keys.s then
+			term.setBackgroundColor(colors.black)
+			term.clear()
+			term.setTextColor(colors.white)
+			term.setCursorPos(1,1)
+			print(" --- EmilOS Single-User Mode ---")
+			write("Loading APIs...")
+			os.loadAPI("System/emilworks")
+			os.loadAPI("System/framework")
+			sleep(0.2)
+			print("ok")
+			return
 		end
+	elseif e == "timer" then
+		break
 	end
-	shell.run("EmilOS")
-	timer = os.startTimer(0.05)
-	while true do
-		e, par1 = os.pullEvent()
-		if e == "shutdown" then
-			os.shutdown()
-		elseif e == "timer" and par1 == timer then
-			emilworks.popupMsg(colors.lime,"3","EmilOS","En fejl opstod og","computeren vil","genstarte")
-			sleep(2)
-			os.reboot()
-		end
+end
+shell.run("EmilOS")
+timer = os.startTimer(0.05)
+while true do
+	e, par1 = os.pullEvent()
+	if e == "shutdown" then
+		os.shutdown()
+	elseif e == "timer" and par1 == timer then
+		emilworks.popupMsg(colors.lime,"3","EmilOS","En fejl opstod og","computeren vil","genstarte")
+		sleep(2)
+		os.reboot()
 	end
 end
