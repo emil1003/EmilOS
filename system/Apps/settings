@@ -1,6 +1,6 @@
  --EmilOS Settings App
 local version = 1.2
- --(c) 2015 Emil Inc. All Rights Reserved.
+ --(c) 2016 Emil Inc. All Rights Reserved.
  
 local currentPage = "main"
 
@@ -8,6 +8,15 @@ local currentPage = "main"
 setFile = fs.open("System/settings","r")
 local settings = textutils.unserialize(setFile.readAll())
 setFile.close()
+if not settings.topBarColor then
+	settings.topBarColor = "white"
+end
+if not settings.topBarTextColor then
+	settings.topBarTextColor = "black"
+end
+if multishell then
+	multishell.setTitle(multishell.getCurrent(),langStrings.settings_appname)
+end
 
 local function makeSelBox(y,width,text,endCh,endChCol)
 	for i=0,width do
@@ -21,51 +30,86 @@ local function makeSelBox(y,width,text,endCh,endChCol)
 	term.setTextColor(colors.black)
 end
 local function main()
-	term.setTextColor(colors.black)
-	term.setCursorPos(1,1)
-	term.setBackgroundColor(colors.white)
-	paintutils.drawLine(1,1,51,1,colors.white)
+	term.setTextColor(colors[settings.topBarTextColor] or colors.black)
+	paintutils.drawLine(1,1,51,1,colors[settings.topBarColor] or colors.white)
 	term.setCursorPos(3,1)
-	write("Indstillinger")
+	write(langStrings.settings_appname)
 	for i=2,19 do
 		paintutils.drawLine(1,i,51,i,colors[settings.background])
 	end
+	term.setTextColor(colors.black)
 	if currentPage == "main" then
-		makeSelBox(3,2,"Generelt",">","black")
-		makeSelBox(7,2,"Grafik",">","black")
-		makeSelBox(11,2,"Netvaerk",">","black")
-		makeSelBox(15,2,"Aktivering",">","black")
-	elseif currentPage == "general" then
-		makeSelBox(3,2,"Tilbage","<","black")
-		makeSelBox(7,2,"Navn",settings.user,"black")
-		if settings.password then
-			makeSelBox(11,2,"Adgangskode","Til","lime")
-		else
-			makeSelBox(11,2,"Adgangskode","Fra","red")
-		end
+		makeSelBox(3,2,langStrings.settings_general,">","black")
+		makeSelBox(7,2,langStrings.settings_graphics,">","black")
+		makeSelBox(11,2,langStrings.settings_network,">","black")
+		makeSelBox(15,2,langStrings.settings_activation,">","black")
+	elseif currentPage == "general2" then
+		makeSelBox(3,2,langStrings.settings_back,"<","black")
+		makeSelBox(7,2,langStrings.settings_name,settings.user,"black")
 		if settings.fullClock then
-			makeSelBox(15,2,"12-Timers Ur","Nej","black")
+			makeSelBox(11,2,langStrings.settings_12hour,langStrings.settings_no,"black")
 		else
-			makeSelBox(15,2,"12-Timers Ur","Ja","black")
+			makeSelBox(11,2,langStrings.settings_12hour,langStrings.settings_yes,"black")
 		end
-	elseif currentPage == "graphics" then
-		makeSelBox(3,2,"Tilbage","<","black")
-		makeSelBox(7,2,"Baggrund",settings.background,"black")
-		if settings.noAnim then
-			makeSelBox(11,2,"Animationer","Nej","red")
+	elseif currentPage == "general" then
+		makeSelBox(3,2,langStrings.settings_back,"<","black")
+		if settings.langPack then
+			makeSelBox(7,2,langStrings.settings_language,settings.langPack,"black")
 		else
-			makeSelBox(11,2,"Animationer","Ja","lime")
+			makeSelBox(7,2,langStrings.settings_language,"?","black")
+		end
+		if settings.password then
+			makeSelBox(11,2,langStrings.settings_password,langStrings.settings_on,"lime")
+		else
+			makeSelBox(11,2,langStrings.settings_password,langStrings.settings_off,"red")
+		end
+		makeSelBox(15,2,langStrings.settings_next,">","black")
+	elseif currentPage == "graphics" then
+		makeSelBox(3,2,langStrings.settings_back,"<","black")
+		local a, b, c = settings.background, settings.topBarColor, settings.topBarTextColor
+		makeSelBox(7,2,langStrings.settings_background,(string.sub(a,1,1):upper()..string.sub(a,2,#a)),"black")
+		makeSelBox(11,2,langStrings.settings_topbar,(string.sub(b,1,1):upper()..string.sub(b,2,#b)).."/"..(string.sub(c,1,1):upper()..string.sub(c,2,#c)),"black")
+		makeSelBox(15,2,langStrings.settings_next,">","black")
+	elseif currentPage == "graphics2" then
+		makeSelBox(3,2,langStrings.settings_back,"<","black")
+		makeSelBox(7,2,langStrings.settings_menucolors,">","black")
+		if not settings.dontDoMenuShadows then
+			makeSelBox(11,2,langStrings.settings_menushadows,langStrings.settings_on,"black")
+		else
+			makeSelBox(11,2,langStrings.settings_menushadows,langStrings.settings_off,"black")
+		end
+		if settings.noAnim then
+			makeSelBox(15,2,langStrings.settings_animations,langStrings.settings_no,"red")
+		else
+			makeSelBox(15,2,langStrings.settings_animations,langStrings.settings_yes,"lime")
 		end
 	elseif currentPage == "network" then
-		makeSelBox(3,2,"Tilbage","<","black")
+		makeSelBox(3,2,langStrings.settings_back,"<","black")
 		if settings.serverUrl == "37.97.2.195" then
-			makeSelBox(7,2,"Server-URL","Standard","black")
+			makeSelBox(7,2,langStrings.settings_serverurl,"Standard","black")
 		else
-			makeSelBox(7,2,"Server-URL",settings.serverUrl,"black")
+			makeSelBox(7,2,langStrings.settings_serverurl,settings.serverUrl,"black")
 		end
+		if settings.dontCheckOnStartup then
+			makeSelBox(11,2,langStrings.settings_checkatstart,langStrings.settings_no,"black")
+		else
+			makeSelBox(11,2,langStrings.settings_checkatstart,langStrings.settings_yes,"black")
+		end
+		makeSelBox(15,2,"RedNet",">","black")
 	elseif currentPage == "activation" then
-		makeSelBox(3,2,"Tilbage","<","black")
-		makeSelBox(7,2,"Aktiveringskode",settings.productKey or "Ikke aktiveret","black")
+		makeSelBox(3,2,langStrings.settings_back,"<","black")
+		if settings.productKey then
+			makeSelBox(7,2,langStrings.settings_activation,langStrings.settings_activated,"black")
+		else
+			makeSelBox(7,2,langStrings.settings_activation,langStrings.settings_notactivated,"black")
+		end
+	elseif currentPage == "rednet" then
+		makeSelBox(3,2,langStrings.settings_back,"<","black")
+		if settings.openRednetOnBoot then
+			makeSelBox(7,2,langStrings.settings_openatstart,langStrings.settings_yes,"black")
+		else
+			makeSelBox(7,2,langStrings.settings_openatstart,langStrings.settings_no,"black")
+		end
 	end
 end
 
@@ -79,88 +123,102 @@ while true do
 		clicked = false
 	end
 	e, but, cx, cy = framework.eventHandler()
-	if e == "mouse_click" then
-		if cx >= 2 and cx <= 14 and cy == 1 then
+	if e == "mouse_click" or e == "key" then
+		if e == "key" then
+			cx, cy = 0, 0
+		end
+		if cx >= 3 and cx <= langStrings.settings_appname:len() + 2 and cy == 1 or e == "key" and but == keys.leftCtrl then
 			term.setCursorPos(2,1)
 			term.setTextColor(colors.white)
-			term.setBackgroundColor(colors.lightBlue)
-			write(" Indstillinger ")
-			cB = framework.menu({"Om Indstillinger","br","Afslut"})
+			term.setBackgroundColor(colors[settings.menuHighlight] or colors.lightBlue)
+			write(" "..langStrings.settings_appname.." ")
+			cB = framework.menu({langStrings.settingsmenu_about,"br",langStrings.settingsmenu_exit})
 			if cB == 1 then
-				emilworks.popupMsg(colors.lime,"3","Indstillinger","Indstillinger","Version "..version,"(c) 2015 Emil Inc.")
+				emilworks.popupMsg(colors.lime,"3","",langStrings.settings_appname.." "..version,"","(c) 2016 Emil Inc.")
 				parallel.waitForAny(function() os.pullEvent("mouse_click") end,function() os.pullEvent("key") end)
 			elseif cB == 3 then
 				return
 			end
 			clicked = true
 		end
-		if cx >= 3 and cx <= 49 and cy >= 3 and cy <= 5 then
+		if cx >= 3 and cx <= 49 and cy >= 3 and cy <= 5 or e == "key" and but == keys.one then
 			if currentPage == "main" then
 				currentPage = "general"
+			elseif currentPage == "rednet" then
+				currentPage = "network"
+			elseif currentPage == "general2" then
+				currentPage = "general"
+			elseif currentPage == "graphics2" then
+				currentPage = "graphics"
 			else
 				currentPage = "main"
 			end
 			clicked = true
-		elseif cx >= 3 and cx <= 49 and cy >= 7 and cy <= 9 then
+		elseif cx >= 3 and cx <= 49 and cy >= 7 and cy <= 9 or e == "key" and but == keys.two then
 			if currentPage == "main" then
 				currentPage = "graphics"
 			elseif currentPage == "general" then
-				local newName = emilworks.popupMsg(colors.lime,"4","EmilOS","Skriv nyt navn")
+				local langs = {}
+				for k,v in pairs(fs.list("System/lang/")) do
+					table.insert(langs,v)
+				end
+				settings.langPack = emilworks.popupMsg(colors.lime,"10","",(langStrings.settings_chooselang or "Choose Language"),langs)
+				file = fs.open("System/lang/"..settings.langPack,"r")
+				_G.langStrings = textutils.unserialize(file.readAll())
+				file.close()
+			elseif currentPage == "general2" then
+				local newName = emilworks.popupMsg(colors.lime,"4","",langStrings.settings_newname)
 				if newName:len() >= 1 then
 					settings.user = newName
 				end
 			elseif currentPage == "graphics" then
 				if isActivated then
-					newBack = emilworks.popupMsg(colors.lime,"4","EmilOS","Skriv farve")
-					if colors[newBack] ~= nil then
-						settings.background = newBack
-					else
-						emilworks.popupMsg(colors.lime,"3","EmilOS","Farve findes ikke")
-						sleep(1)
-					end
+					settings.background = emilworks.popupMsg(colors.lime,"8","",langStrings.settings_selectbackground)
 				else
-					emilworks.popupMsg(colors.lime,"1","EmilOS","EmilOS er ikke aktiveret")
+					emilworks.popupMsg(colors.lime,"1","",langStrings.settings_emilosnotactivated)
+				end
+			elseif currentPage == "graphics2" then
+				if isActivated then
+					settings.menuBackground = emilworks.popupMsg(colors.lime,"8","",langStrings.settings_selectbackground)
+					settings.menuText = emilworks.popupMsg(colors.lime,"8","",langStrings.settings_selecttextcolor)
+					settings.menuInactive = emilworks.popupMsg(colors.lime,"8","",langStrings.settings_selectinactive)
+					settings.menuHighlight = emilworks.popupMsg(colors.lime,"8","",langStrings.settings_selecthighlight)
+				else
+					emilworks.popupMsg(colors.lime,"1","",langStrings.settings_emilosnotactivated)
 				end
 			elseif currentPage == "network" then
 				if isActivated then
-					newUrl = emilworks.popupMsg(colors.lime,"4","EmilOS","Skriv ny Server URL","(Enter for Standard)")
+					newUrl = emilworks.popupMsg(colors.lime,"4","",langStrings.settings_newserverurl,langStrings.settings_newserverurl2)
 					if #newUrl >= 1 then
 						settings.serverUrl = newUrl
 					else
 						settings.serverUrl = "37.97.2.195"
 					end
 				else
-					emilworks.popupMsg(colors.lime,"1","EmilOS","EmilOS er ikke aktiveret")
+					emilworks.popupMsg(colors.lime,"1","",langStrings.settings_emilosnotactivated)
 				end
 			elseif currentPage == "activation" then
 				if not settings.productKey then
 					while true do
-						username = emilworks.popupMsg(colors.lime,"4","EmilOS","Indtast Brugernavn")
-						if username:len() < 1 then
-							break
-						end
-						local password = emilworks.hash(emilworks.popupMsg(colors.lime,"5","EmilOS","Indtast Adgangskode"))
-						emilworks.popupMsg(colors.lime,"3","EmilOS","Vent Venligst...")
-						local a = http.post("http://"..settings.serverUrl.."/login.php","request="..username)
-						if a.readAll() == password then
-							a = nil
+						state, username = emilworks.authenticate(settings.serverUrl)
+						if state == true then
 							local a = http.get("http://"..settings.serverUrl.."/data/EmilOSRegister.php?action=checkUser&username="..username)
 							if a then
 								a = a.readAll()
 							end
 							if a == "no_key" then
 								while true do
-									b = emilworks.popupMsg(colors.lime,"4","EmilOS","Indtast produktkode","(10 tal og bogstaver)")
+									b = emilworks.popupMsg(colors.lime,"4","",langStrings.settings_productcode,langStrings.settings_productcode2)
 									if b:len() == 10 then
-										if emilworks.popupMsg(colors.lime,"6","EmilOS","Vil du binde denne","kode til "..username.."?") then
-											emilworks.popupMsg(colors.lime,"3","EmilOS","Vent Venligst...")
+										if emilworks.popupMsg(colors.lime,"6","",langStrings.settings_bindcodeto,langStrings.settings_bindcodeto2.." "..username.."?") then
+											emilworks.popupMsg(colors.lime,"3","",langStrings.settings_pleasewait)
 											http.get("http://"..settings.serverUrl.."/data/EmilOSRegister.php?action=register&username="..username.."&key="..b)
 											break
 										end
 									end
 								end
 							elseif a ~= nil then
-								if emilworks.popupMsg(colors.lime,"6","EmilOS","Vil du binde denne","computer til "..username.."?") then
+								if emilworks.popupMsg(colors.lime,"6","",langStrings.settings_bindcomputerto,langStrings.settings_bindcomputerto2.." "..username.."?") then
 									b = a
 								else
 									b = nil
@@ -170,59 +228,93 @@ while true do
 							end
 							if b then
 								settings.productKey = b
-								emilworks.popupMsg(colors.lime,"1","EmilOS","EmilOS er registreret!","Genstart for at","aktivere")
+								_G.isActivated = true
+								emilworks.popupMsg(colors.lime,"1","",langStrings.settings_isnowactivated)
 								break
 							else
-								emilworks.popupMsg(colors.red,"1","EmilOS","EmilOS blev ikke","registreret")
+								emilworks.popupMsg(colors.red,"1","",langStrings.settings_isnotactivated)
 								break
 							end
+						elseif state == "cancel" then
+							break
 						end
 					end
 				else
-					if emilworks.popupMsg(colors.lime,"6","EmilOS","Vil du deaktivere","EmilOS?") then
+					if emilworks.popupMsg(colors.lime,"6","",langStrings.settings_deactivate,langStrings.settings_deactivate2) then
 						settings.productKey = nil
 					end
 				end
+			elseif currentPage == "rednet" then
+				settings.openRednetOnBoot = emilworks.popupMsg(colors.lime,"6","",langStrings.settings_openrednetonstart)
 			end
 			clicked = true
-		elseif cx >= 3 and cx <= 49 and cy >= 11 and cy <= 13 then
+		elseif cx >= 3 and cx <= 49 and cy >= 11 and cy <= 13 or e == "key" and but == keys.three then
 			if currentPage == "main" then
 				currentPage = "network"
 			elseif currentPage == "general" then
 				if settings.password then
-					oldPass = emilworks.hash(emilworks.popupMsg(colors.lime,"5","EmilOS","Skriv nuvaerende kode"))
+					oldPass = emilworks.hash(emilworks.popupMsg(colors.lime,"5","",langStrings.settings_currentpassword))
 				else
 					oldPass = settings.password
 				end
 				if oldPass == settings.password then
-					newPass = emilworks.popupMsg(colors.lime,"5","EmilOS","Skriv ny Adgangskode","(Enter for ingen kode)")
+					newPass = emilworks.popupMsg(colors.lime,"5","",langStrings.settings_newpassword,langStrings.settings_newpassword2)
 					if #newPass >= 1 then
 						settings.password = emilworks.hash(newPass)
 					else
 						settings.password = nil
 					end
 				else
-					emilworks.popupMsg(colors.red,"3","EmilOS","Kode er forkert!")
+					emilworks.popupMsg(colors.red,"3","",langStrings.settings_wrongpassword)
 					sleep(1)
 				end
+			elseif currentPage == "general2" then
+				settings.fullClock = not emilworks.popupMsg(colors.lime,"6","",langStrings.settings_use12hour)
 			elseif currentPage == "graphics" then
 				if isActivated then
-					settings.noAnim = not emilworks.popupMsg(colors.lime,"6","EmilOS","Brug animationer?")
+					settings.topBarColor = emilworks.popupMsg(colors.lime,"8","",langStrings.settings_selectbackground)
+					settings.topBarTextColor = emilworks.popupMsg(colors.lime,"8","",langStrings.settings_selecttextcolor)
 				else
-					emilworks.popupMsg(colors.lime,"1","EmilOS","EmilOS er ikke aktiveret")
+					emilworks.popupMsg(colors.lime,"1","",langStrings.settings_emilosnotactivated)
+				end
+			elseif currentPage == "graphics2" then
+				if isActivated then
+					settings.dontDoMenuShadows = not emilworks.popupMsg(colors.lime,"6","",langStrings.settings_usemenushadows)
+				else
+					emilworks.popupMsg(colors.lime,"1","",langStrings.settings_emilosnotactivated)
+				end
+			elseif currentPage == "network" then
+				if isActivated then
+					settings.dontCheckOnStartup = not emilworks.popupMsg(colors.lime,"6","",langStrings.settings_docheckatstart,langStrings.settings_docheckatstart2)
+				else
+					emilworks.popupMsg(colors.lime,"1","",langStrings.settings_emilosnotactivated)
 				end
 			end
 			clicked = true
-		elseif cx >= 3 and cx <= 49 and cy >= 15 and cy <= 17 then
+		elseif cx >= 3 and cx <= 49 and cy >= 15 and cy <= 17 or e == "key" and but == keys.four then
 			if currentPage == "main" then
 				currentPage = "activation"
 			elseif currentPage == "general" then
-				settings.fullClock = not emilworks.popupMsg(colors.lime,"6","EmilOS","Brug 12-Timers Ur?")
+				currentPage = "general2"
+			elseif currentPage == "graphics" then
+				currentPage = "graphics2"
+			elseif currentPage == "graphics2" then
+				if isActivated then
+					settings.noAnim = not emilworks.popupMsg(colors.lime,"6","",langStrings.settings_useanimations)
+				else
+					emilworks.popupMsg(colors.lime,"1","",langStrings.settings_emilosnotactivated)
+				end
+			elseif currentPage == "network" then
+				currentPage = "rednet"
 			end
 			clicked = true
 		end
-	elseif e == "framework_redraw" then
+	elseif e == "framework_redraw" or e == "framework_fullRedraw" then
 		framework.clearPopup()
 		clicked = true
+	elseif e == "frameworkCloseProgram" then
+		if multishell.getCount() == 1 then
+			clicked = true
+		end
 	end
 end

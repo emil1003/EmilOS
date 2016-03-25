@@ -1,15 +1,15 @@
  --EmilOS Framework
-local version = 1.21
- --(c) 2015 Emil Inc. All Rights Reserved.
+local version = 1.22
+ --(c) 2016 Emil Inc. All Rights Reserved.
 
 function menu(entries,disabled,bClock)
 	local lL = 0
 	local buttonY = {}
-	if bClock then
-		setFile = fs.open("System/settings","r")
-		settings = textutils.unserialize(setFile.readAll())
-		setFile.close()
-	end
+	local firstKeyClick = true
+	local selected = 0
+	setFile = fs.open("System/settings","r")
+	local settings = textutils.unserialize(setFile.readAll())
+	setFile.close()
 	if disabled == nil then
 		disabled = {}
 	end
@@ -17,39 +17,41 @@ function menu(entries,disabled,bClock)
 		if v:len() >= lL then
 			lL = v:len()
 		end
-	end
+	end -- MORTEN ER DEJLIG!
 	for i=1,#entries + 1 do
-		paintutils.drawLine(2,i + 1,lL + 3,i + 1,colors.white)
+		paintutils.drawLine(2,i + 1,lL + 3,i + 1,colors[settings.menuBackground] or colors.white)
 		menuL = i
 	end
 	for i=1,#entries do
 		if disabled[i] == true then
-			term.setTextColor(colors.lightGray)
+			term.setTextColor(colors[settings.menuInactive] or colors.lightGray)
 			term.setCursorPos(3,i + 1)
 			print(entries[i])
 		elseif entries[i] == "br" then
-			term.setTextColor(colors.lightGray)
+			term.setTextColor(colors[settings.menuInactive] or colors.lightGray)
 			term.setCursorPos(2,i + 1)
 			for i=1,lL + 2 do
 				write("-")
 			end
 		else
-			term.setTextColor(colors.black)
+			term.setTextColor(colors[settings.menuText] or colors.black)
 			term.setCursorPos(3,i + 1)
 			print(entries[i])
 			buttonY[i] = i + 1
 		end
 	end
-	paintutils.drawLine(3,menuL + 2,lL + 4,menuL + 2,colors.black)
-	paintutils.drawLine(lL + 4,2,lL + 4,menuL + 2,colors.black)
-	term.setTextColor(colors.white)
+	if not settings.dontDoMenuShadows then
+		paintutils.drawLine(3,menuL + 2,lL + 4,menuL + 2,colors.black)
+		paintutils.drawLine(lL + 4,3,lL + 4,menuL + 2,colors.black)
+	end
+	ClockID = os.startTimer(0.2)
 	while true do
 		e, but, cx, cy = eventHandler()
 		if e == "mouse_click" then
 			for i=1,#entries do
 				if cx >= 2 and cx <= lL + 3 and cy == buttonY[i] then
 					term.setTextColor(colors.white)
-					paintutils.drawLine(2,i + 1,lL + 3,i + 1,colors.lightBlue)
+					paintutils.drawLine(2,i + 1,lL + 3,i + 1,colors[settings.menuHighlight] or colors.lightBlue)
 					term.setCursorPos(3,i + 1)
 					write(entries[i])
 					sleep(0.2)
@@ -60,14 +62,109 @@ function menu(entries,disabled,bClock)
 				os.queueEvent("mouse_click",but,cx,cy)
 			end
 			return "close"
-		elseif e == "key" and but == keys.leftCtrl then
-			return "close"
+		elseif e == "key" then
+			if but == keys.leftCtrl then
+				return "close"
+			elseif but == keys.down or but == keys.up then
+				if firstKeyClick then
+					if but == keys.down then
+						for i=1,#entries do
+							if entries[i] ~= "br" and disabled[i] ~= true then
+								selected = i
+								term.setCursorPos(2,1 + i)
+								break
+							end
+						end
+					elseif but == keys.up then
+						for i=#entries,1,-1 do
+							if entries[i] ~= "br" and disabled[i] ~= true then
+								selected = i
+								term.setCursorPos(2,i + 1)
+								break
+							end
+						end
+					end
+					term.setTextColor(colors[settings.menuText] or colors.black)
+					term.setBackgroundColor(colors[settings.menuBackground] or colors.white)
+					if _HOST then
+						write("\26")
+					else
+						write(">")
+					end
+					firstKeyClick = false
+				else
+					if but == keys.down then
+						if selected < #entries then
+							oldPos = selected
+							local progress = 1
+							while true do
+								if entries[selected + progress] ~= "br" and disabled[selected + progress] ~= true then
+									selected = selected + progress
+									break
+								else
+									progress = progress + 1
+								end
+							end
+						else
+							selected = 1
+							oldPos = #entries
+						end
+					elseif but == keys.up then
+						if selected > 1 then
+							oldPos = selected
+							local progress = 1
+							while true do
+								if entries[selected - progress] ~= "br" and disabled[selected - progress] ~= true then
+									selected = selected - progress
+									break
+								else
+									progress = progress + 1
+								end
+							end
+						else
+							selected = #entries
+							oldPos = 1
+						end
+					end
+					term.setTextColor(colors[settings.menuText] or colors.black)
+					term.setBackgroundColor(colors[settings.menuBackground] or colors.white)
+					term.setCursorPos(2,1 + oldPos)
+					write(" ")
+					term.setCursorPos(2,1 + selected)
+					if _HOST then
+						write("\26")
+					else
+						write(">")
+					end
+				end
+			elseif but == keys.enter and not firstKeyClick and selected <= #entries then
+				if not disabled[selected] then
+					term.setTextColor(colors.white)
+					paintutils.drawLine(2,selected + 1,lL + 3,selected + 1,colors[settings.menuHighlight] or colors.lightBlue)
+					term.setCursorPos(3,selected + 1)
+					write(entries[selected])
+					sleep(0.2)
+					return selected
+				end
+			end
+		elseif e == "timer" and but == ClockID and bClock then
+			paintutils.drawLine(30,1,48,1,colors[settings.topBarColor] or colors.white)
+			term.setCursorPos(48 - textutils.formatTime(os.time(),settings.fullClock):len(),1)
+			term.setTextColor(colors[settings.topBarTextColor] or colors.black)
+			write(textutils.formatTime(os.time(),settings.fullClock))
+			ClockID = os.startTimer(0.2)
 		end
 	end
 end
 function httpRequest(par1,par2,par3)
 	_G.isGettingData = true
 	http.request(par1,par2,par3)
+end
+function getSettings()
+	local setFile = fs.open("System/settings","r")
+	local settings = textutils.unserialize(setFile.readAll())
+	setFile.close()
+	return settings
 end
 function clearPopup()
 	frameworkPopup, _G.bPopup, frameworkPopupName = false, false, nil
@@ -77,36 +174,22 @@ function clearPopup()
 		end
 	end
 end
-function eventHandler(forceSetLoad)
-	if not frameworkSetIsLoaded or forceSetLoad then
-		file = fs.open("System/settings","r")
-		settings = textutils.unserialize(file.readAll())
-		file.close()
-		frameworkSetIsLoaded = true
-		if forceSetLoad then
-			return true
-		end
-	end
-	--local ClockID = os.startTimer(1)
+function eventHandler()
 	while true do
 		if tMessage then
 			message(tMessage[1],tMessage[2],tMessage[3],tMessage[4],tMessage[5])
 			tMessage = nil
 		end
 		e, par1, par2, par3, par4, par5 = os.pullEventRaw()
-		if e == "timer" and par1 == ClockID then
-			paintutils.drawLine(30,1,48,1,colors.white)
-			term.setCursorPos(48 - textutils.formatTime(os.time(),settings.fullClock):len(),1)
-			term.setBackgroundColor(colors.white)
-			term.setTextColor(colors.black)
-			write(textutils.formatTime(os.time(),settings.fullClock))
-			ClockID = os.startTimer(1)
-		elseif e == "alarm" and par1 == popupTimerID and frameworkPopup then
+		if e == "alarm" and par1 == popupTimerID and frameworkPopup then
 			frameworkPopup, _G.bPopup, frameworkPopupName = false, false, nil
 			if os.cancelAlarm then
 				os.cancelAlarm(popupTimerID)
 			end
 			return "framework_redraw"
+		elseif e == "key" and par1 == keys.leftAlt and frameworkPopup then
+			os.queueEvent("mouse_click",1,50,4)
+			os.queueEvent("mouse_click",1,50,5)
 		elseif e == "mouse_click" and par2 >= 36 and par3 >= 3 and par3 <= 8 and frameworkPopup then
 			if par2 == 50 and par3 == 4 then
 				frameworkPopup, _G.bPopup = false, false
@@ -117,14 +200,13 @@ function eventHandler(forceSetLoad)
 				messageHandler("save")
 				frameworkPopupName = nil
 				return "framework_redraw"
-			elseif isAssociatedApp then
+			elseif isAssociatedFunc then
 				frameworkPopup, _G.bPopup = false, false
 				if os.cancelAlarm then
 					os.cancelAlarm(popupTimerID)
 				end
 				frameworkPopupName = nil
-				shell.run(isAssociatedApp)
-				return "framework_redraw"
+				_G.customFunctions[isAssociatedFunc]()
 			end
 		elseif e == "http_success" or e == "http_failure" then
 			_G.isGettingData = false
@@ -137,12 +219,49 @@ function eventHandler(forceSetLoad)
 			write("Ended program")
 			term.setCursorPos(1,2)
 			return e
-		else
-			return e, par1, par2, par3, par4, par5
 		end
+		if _G.registeredEvents then
+			for i=1,#_G.registeredEvents do
+				if _G.registeredEvents[i]["event"] == e then
+					_G.calledEvent = _G.registeredEvents[i]
+					local state1, state2, state3, state4, state5 = false, false, false, false, false
+					if _G.calledEvent.par1 == par1 or _G.calledEvent.par1 == "-any" then
+						state1 = true
+					end
+					if _G.calledEvent.par2 == par2 or _G.calledEvent.par2 == "-any" then
+						state2 = true
+					end
+					if _G.calledEvent.par3 == par3 or _G.calledEvent.par3 == "-any" then
+						state3 = true
+					end
+					if _G.calledEvent.par4 == par4 or _G.calledEvent.par4 == "-any" then
+						state4 = true
+					end
+					if _G.calledEvent.par5 == par5 or _G.calledEvent.par5 == "-any" then
+						state5 = true
+					end
+					if state1 and state2 and state3 and state4 and state5 then
+						_G.calledEvent.par1 = par1
+						_G.calledEvent.par2 = par2
+						_G.calledEvent.par3 = par3
+						_G.calledEvent.par4 = par4
+						_G.calledEvent.par5 = par5
+						if _G.customFunctions[_G.calledEvent.appName] then
+							local doRedraw = _G.customFunctions[_G.calledEvent.appName]()
+							if doRedraw then
+								return "framework_fullRedraw"
+							end
+						else
+							return "customEvent"
+						end
+					end
+				end
+			end
+		end
+		return e, par1, par2, par3, par4, par5
 	end
 end
-function message(title,textLine1,textLine2,doPopup,associatedApp)
+function message(title,textLine1,textLine2,doPopup,associatedFunc)
 	if fs.exists("System/messages") then
 		file = fs.open("System/messages","r")
 		messages = textutils.unserialize(file.readAll())
@@ -172,9 +291,9 @@ function message(title,textLine1,textLine2,doPopup,associatedApp)
 		frameworkPopup = true
 		frameworkPopupName = title
 		_G.bPopup = true
-		if associatedApp then
-			if fs.exists(associatedApp) then
-				isAssociatedApp = associatedApp
+		if associatedFunc then
+			if _G.customFunctions[associatedFunc] then
+				isAssociatedFunc = associatedFunc
 			end
 		end
 		return true
@@ -186,6 +305,80 @@ function delayedMessage(par1,par2,par3,par4,par5)
 end
 function endProgram()
 	os.queueEvent("frameworkCloseProgram")
+end
+function registerEvent(appName,event,par1,par2,par3,par4,par5,func)
+	if not registeredEvents then
+		_G.registeredEvents = {}
+	end
+	local newEvent = {}
+	newEvent.appName = appName
+	newEvent.event = event
+	if par1 then
+		newEvent.par1 = par1
+	end
+	if par2 then
+		newEvent.par2 = par2
+	end
+	if par3 then
+		newEvent.par3 = par3
+	end
+	if par4 then
+		newEvent.par4 = par4
+	end
+	if par5 then
+		newEvent.par5 = par5
+	end
+	table.insert(_G.registeredEvents,newEvent)
+	file = fs.open("System/customEvents","w")
+	file.write(textutils.serialize(_G.registeredEvents))
+	file.close()
+	if func then
+		if not _G.customFunctions[appName] then
+			_G.customFunctions[appName] = func
+		end
+	end
+end
+function unregisterEvent(appName,event,par1,par2,par3,par4,par5)
+	for i=1,#_G.registeredEvents do
+		if _G.registeredEvents[i]["appName"] == appName then
+			if event or par1 or par2 or par3 or par4 or par5 then
+				local a = _G.registeredEvents[i]
+				if a.event == event or a.par1 == par1 or a.par2 == par2 or a.par3 == par3 or a.par4 == par4 or a.par5 == par5 then
+					table.remove(registeredEvents,i)
+					file = fs.open("System/customEvents","w")
+					file.write(textutils.serialize(_G.registeredEvents))
+					file.close()
+					return true
+				else
+					return false
+				end
+			else
+				table.remove(registeredEvents,i)
+				file = fs.open("System/customEvents","w")
+				file.write(textutils.serialize(_G.registeredEvents))
+				file.close()
+				return true
+			end
+		end
+	end
+	return false
+end
+function findEvent(appName)
+	for i=1,#_G.registeredEvents do
+		if _G.registeredEvents[i]["appName"] == appName then
+			return true
+		end
+	end
+	return false
+end
+function findOnBoot(appName)
+	local settings = framework.getSettings()
+	for i=1,#settings.onBoot do
+		if settings.onBoot[i] == appName then
+			return true
+		end
+	end
+	return false
 end
 function messageHandler(mode)
 	if mode == "load" then
@@ -202,4 +395,256 @@ function messageHandler(mode)
 		file.write(textutils.serialize(messages))
 		file.close()
 	end
+end
+function read( _sReplaceChar, _tHistory, _fnComplete ) -- Copied from bios.lua and modified to use framework.eventHandler
+    term.setCursorBlink( true )
+
+    local sLine = ""
+    local nHistoryPos
+    local nPos = 0
+    if _sReplaceChar then
+        _sReplaceChar = string.sub( _sReplaceChar, 1, 1 )
+    end
+
+    local tCompletions
+    local nCompletion
+    local function recomplete()
+        if _fnComplete and nPos == string.len(sLine) then
+            tCompletions = _fnComplete( sLine )
+            if tCompletions and #tCompletions > 0 then
+                nCompletion = 1
+            else
+                nCompletion = nil
+            end
+        else
+            tCompletions = nil
+            nCompletion = nil
+        end
+    end
+
+    local function uncomplete()
+        tCompletions = nil
+        nCompletion = nil
+    end
+
+    local w = term.getSize()
+    local sx = term.getCursorPos()
+
+    local function redraw( _bClear )
+        local nScroll = 0
+        if sx + nPos >= w then
+            nScroll = (sx + nPos) - w
+        end
+
+        local cx,cy = term.getCursorPos()
+        term.setCursorPos( sx, cy )
+        local sReplace = (_bClear and " ") or _sReplaceChar
+        if sReplace then
+            term.write( string.rep( sReplace, math.max( string.len(sLine) - nScroll, 0 ) ) )
+        else
+            term.write( string.sub( sLine, nScroll + 1 ) )
+        end
+
+        if nCompletion then
+            local sCompletion = tCompletions[ nCompletion ]
+            local oldText, oldBg
+            if not _bClear then
+                oldText = term.getTextColor()
+                oldBg = term.getBackgroundColor()
+                term.setTextColor( colors.white )
+                term.setBackgroundColor( colors.gray )
+            end
+            if sReplace then
+                term.write( string.rep( sReplace, string.len( sCompletion ) ) )
+            else
+                term.write( sCompletion )
+            end
+            if not _bClear then
+                term.setTextColor( oldText )
+                term.setBackgroundColor( oldBg )
+            end
+        end
+
+        term.setCursorPos( sx + nPos - nScroll, cy )
+    end
+    
+    local function clear()
+        redraw( true )
+    end
+
+    recomplete()
+    redraw()
+
+    local function acceptCompletion()
+        if nCompletion then
+            -- Clear
+            clear()
+
+            -- Find the common prefix of all the other suggestions which start with the same letter as the current one
+            local sCompletion = tCompletions[ nCompletion ]
+            sLine = sLine .. sCompletion
+            nPos = string.len( sLine )
+
+            -- Redraw
+            recomplete()
+            redraw()
+        end
+    end
+    while true do
+        local sEvent, param = framework.eventHandler()
+        if sEvent == "char" then
+            -- Typed key
+            clear()
+            sLine = string.sub( sLine, 1, nPos ) .. param .. string.sub( sLine, nPos + 1 )
+            nPos = nPos + 1
+            recomplete()
+            redraw()
+
+        elseif sEvent == "paste" then
+            -- Pasted text
+            clear()
+            sLine = string.sub( sLine, 1, nPos ) .. param .. string.sub( sLine, nPos + 1 )
+            nPos = nPos + string.len( param )
+            recomplete()
+            redraw()
+
+        elseif sEvent == "key" then
+            if param == keys.enter then
+                -- Enter
+                if nCompletion then
+                    clear()
+                    uncomplete()
+                    redraw()
+                end
+                break
+                
+            elseif param == keys.left then
+                -- Left
+                if nPos > 0 then
+                    clear()
+                    nPos = nPos - 1
+                    recomplete()
+                    redraw()
+                end
+                
+            elseif param == keys.right then
+                -- Right                
+                if nPos < string.len(sLine) then
+                    -- Move right
+                    clear()
+                    nPos = nPos + 1
+                    recomplete()
+                    redraw()
+                else
+                    -- Accept autocomplete
+                    acceptCompletion()
+                end
+
+            elseif param == keys.up or param == keys.down then
+                -- Up or down
+                if nCompletion then
+                    -- Cycle completions
+                    clear()
+                    if param == keys.up then
+                        nCompletion = nCompletion - 1
+                        if nCompletion < 1 then
+                            nCompletion = #tCompletions
+                        end
+                    elseif param == keys.down then
+                        nCompletion = nCompletion + 1
+                        if nCompletion > #tCompletions then
+                            nCompletion = 1
+                        end
+                    end
+                    redraw()
+
+                elseif _tHistory then
+                    -- Cycle history
+                    clear()
+                    if param == keys.up then
+                        -- Up
+                        if nHistoryPos == nil then
+                            if #_tHistory > 0 then
+                                nHistoryPos = #_tHistory
+                            end
+                        elseif nHistoryPos > 1 then
+                            nHistoryPos = nHistoryPos - 1
+                        end
+                    else
+                        -- Down
+                        if nHistoryPos == #_tHistory then
+                            nHistoryPos = nil
+                        elseif nHistoryPos ~= nil then
+                            nHistoryPos = nHistoryPos + 1
+                        end                        
+                    end
+                    if nHistoryPos then
+                        sLine = _tHistory[nHistoryPos]
+                        nPos = string.len( sLine ) 
+                    else
+                        sLine = ""
+                        nPos = 0
+                    end
+                    uncomplete()
+                    redraw()
+
+                end
+
+            elseif param == keys.backspace then
+                -- Backspace
+                if nPos > 0 then
+                    clear()
+                    sLine = string.sub( sLine, 1, nPos - 1 ) .. string.sub( sLine, nPos + 1 )
+                    nPos = nPos - 1
+                    recomplete()
+                    redraw()
+                end
+
+            elseif param == keys.home then
+                -- Home
+                if nPos > 0 then
+                    clear()
+                    nPos = 0
+                    recomplete()
+                    redraw()
+                end
+
+            elseif param == keys.delete then
+                -- Delete
+                if nPos < string.len(sLine) then
+                    clear()
+                    sLine = string.sub( sLine, 1, nPos ) .. string.sub( sLine, nPos + 2 )                
+                    recomplete()
+                    redraw()
+                end
+
+            elseif param == keys["end"] then
+                -- End
+                if nPos < string.len(sLine ) then
+                    clear()
+                    nPos = string.len(sLine)
+                    recomplete()
+                    redraw()
+                end
+
+            elseif param == keys.tab then
+                -- Tab (accept autocomplete)
+                acceptCompletion()
+
+            end
+
+        elseif sEvent == "term_resize" then
+            -- Terminal resized
+            w = term.getSize()
+            redraw()
+
+        end
+    end
+
+    local cx, cy = term.getCursorPos()
+    term.setCursorBlink( false )
+    term.setCursorPos( w + 1, cy )
+    print()
+    
+    return sLine
 end

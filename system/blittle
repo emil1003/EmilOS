@@ -1,0 +1,144 @@
+-- +--------------------------------------------------------+
+-- |                                                        |
+-- |                        BLittle                         |
+-- |                                                        |
+-- +--------------------------------------------------------+
+
+local version = "Version 1.0.0"
+
+-- By Jeffrey Alexander, aka Bomb Bloke.
+-- Shrinks paintutils images to make use of ComputerCraft 1.76's new character system.
+-- 
+
+-------------------------------------------------------------
+
+local relations = {[0] = {8, 4, 3, 6, 5}, {4, 14, 8, 7}, {6, 10, 8, 7}, {9, 11, 8, 0}, {1, 14, 8, 0}, {13, 12, 8, 0}, {2, 10, 8, 0}, {15, 8, 10, 11, 12, 14}, {0, 7, 1, 9, 2, 13}, {3, 11, 8, 7}, {2, 6, 7, 15}, {9, 3, 7, 15}, {13, 5, 7, 15}, {5, 12, 8, 7}, {1, 4, 7, 15}, {7, 10, 11, 12, 14}}
+
+local colourNum, exponents = {}, {}
+for i = 0, 15 do exponents[2^i] = i end
+do
+	local hex = "0123456789abcdef"
+	for i = 1, 16 do colourNum[i - 1] = hex:sub(i, i) end
+end
+
+local function getBestColourMatch(usage)
+	local lastCol = relations[exponents[usage[#usage][1]]]
+
+	for j = 1, #lastCol do
+		local thisRelation = lastCol[j]
+		for i = 1, #usage - 1 do if usage[i][1] == thisRelation then return i end end
+	end
+	
+	return 1
+end
+
+function shrink(image, bgCol)
+	local results, width, height, bgCol = {{}, {}, {}}, 0, #image + #image % 3, bgCol or colours.black
+	for i = 1, #image do if #image[i] > width then width = #image[i] end end
+	
+	for y = 0, height - 1, 3 do
+		local cRow, tRow, bRow = {}, {}, {}
+		
+		for x = 0, width - 1, 2 do
+			-- Grab a 2x3 chunk:
+			local pattern, totals = {}, {}
+			for yy = 1, 3 do for xx = 1, 2 do
+				pattern[#pattern + 1] = (image[y + yy] and image[y + yy][x + xx]) and (image[y + yy][x + xx] == 0 and bgCol or image[y + yy][x + xx]) or bgCol
+				totals[pattern[#pattern]] = totals[pattern[#pattern]] and (totals[pattern[#pattern]] + 1) or 1
+			end end
+			
+			local usage = {}
+			for key, value in pairs(totals) do usage[#usage + 1] = {key, value} end
+			table.sort(usage, function (a, b) return a[2] > b[2] end)
+			
+			if #usage > 1 then
+				-- Reduce the chunk to two colours:
+				while #usage > 2 do
+					local matchFrom, matchTo = usage[#usage][1], usage[getBestColourMatch(usage)][1]
+					for i = 1, 6 do if pattern[i] == matchFrom then pattern[i] = matchTo end end
+					usage[#usage] = nil
+				end
+				
+				-- Convert to character. Adapted from oli414's function:
+				-- http://www.computercraft.info/forums2/index.php?/topic/25340-cc-176-easy-drawing-characters/
+				local data = 128
+				for i = 1, #pattern - 1 do if pattern[i] ~= pattern[6] then data = data + 2^(i-1) end end
+				cRow[#cRow + 1] = string.char(data)
+				
+				tRow[#tRow + 1] = colourNum[exponents[usage[1][1] == pattern[6] and usage[2][1] or usage[1][1]]]
+				bRow[#bRow + 1] = colourNum[exponents[pattern[6]]]
+			else
+				-- Solid colour character:
+				cRow[#cRow + 1] = " "
+				tRow[#tRow + 1] = colourNum[exponents[pattern[1]]]
+				bRow[#bRow + 1] = colourNum[exponents[pattern[1]]]
+			end
+		end
+		
+		results[1][#results[1] + 1], results[2][#results[2] + 1], results[3][#results[3] + 1] = table.concat(cRow), table.concat(tRow), table.concat(bRow)
+	end
+	
+	results.width, results.height = #results[1][1], #results[1]
+	
+	return results
+end
+
+function draw(image, x, y, terminal)
+	x, y, terminal = x or 1, y or 1, terminal or term
+	terminal.setCursorPos(x, y)
+	for i = 1, image.height do
+		terminal.blit(image[1][i], image[2][i], image[3][i])
+		terminal.setCursorPos(x, y + i)
+	end
+end
+
+function save(image, filename)
+	local output = fs.open(filename, "wb")
+	if not output then error("Can't open "..output.." for output.") end
+	
+	local function writeInt(num)
+		output.write(bit.band(num, 255))
+		output.write(bit.brshift(num, 8))
+	end
+	
+	writeInt(image.width)
+	writeInt(image.height)
+	
+	for i = 1, 3 do
+		local thisSet = image[i]
+		for y = 1, image.height do
+			local thisRow = thisSet[y]
+			for x = 1, image.width do output.write(thisRow:byte(x)) end
+		end
+	end
+	
+	output.close()
+end
+
+function load(filename)
+	local input = fs.open(filename, "rb")
+	if not input then error("Can't open "..input.." for input.") end
+	
+	local function readInt()
+		local result = input.read()
+		return result + bit.blshift(input.read(), 8)
+	end
+	
+	local image = {}
+	image.width = readInt()
+	image.height = readInt()
+	
+	for i = 1, 3 do
+		local thisSet = {}
+		for y = 1, image.height do
+			local thisRow = {}
+			for x = 1, image.width do thisRow[x] = string.char(input.read()) end
+			thisSet[y] = table.concat(thisRow)
+		end
+		image[i] = thisSet
+	end
+	
+	input.close()
+	
+	return image
+end

@@ -1,21 +1,20 @@
- --EmilOS (Login Program)
-local version = 1.2
- --(c) 2015 Emil Inc. All Rights Reserved.
- 
- --Locals
-local popupColor = colors.lime
-local popupTitle = "EmilOS"
-local tries = 0
+ --EmilOS (Startup Program)
+local version = 2.1
+ --(c) 2016 Emil Inc. All Rights Reserved.
 
- --Load EmilWorks
-if fs.exists("System/emilworks") then
-	os.loadAPI("System/emilworks")
+ --Locals
+local checkFileList = {"EmilOS","System/framework","System/emilworks","System/sha","System/Apps/appStore","System/Apps/settings"}
+local fileNotFound = nil
+local userFiles = {"customEvents","messages","installedApps","settings"}
+local settings = nil
+
+if _HOST then
+	_G.aa, _G.ae, _G.oe = "å", "æ", "ø"
 else
-	print("EmilWorks is missing")
-	return
+	_G.aa, _G.ae, _G.oe = "aa", "ae", "oe"
 end
 
- --Load settings file
+ --Check for and load settings
 if fs.exists("System") then
 	if fs.exists("System/settings") then
 		file = fs.open("System/settings","r")
@@ -23,66 +22,383 @@ if fs.exists("System") then
 		file.close()
 		if settings == nil then
 			settings = {}
-			firstTime = true
+			firstTimeBoot = true
 		end
 	elseif fs.exists("System/oldSettings") then
-		file = fs.open("System/oldSettings","r")
-		settings = textutils.unserialize(file.readAll())
-		file.close()
-		firstTime = true
+		settings = {}
+		firstTimeBoot = true
 		updated = true
 	else
 		settings = {}
-		firstTime = true
+		firstTimeBoot = true
 	end
 end
 if not settings.background then
 	settings.background = "gray"
 end
+if not settings.langPack then
+	settings.langPack = "English"
+end
+if fs.exists("System/lang/"..settings.langPack) then
+	file = fs.open("System/lang/"..settings.langPack,"r")
+	_G.langStrings = textutils.unserialize(file.readAll())
+	file.close()
+else
+	error("Language Pack not found: /System/lang/"..(settings.langPack or ""),0)
+end
+if not fs.exists("Apps/data") then
+	fs.makeDir("Apps/data")
+end
 
- --If first time
-if firstTime then
-	emilworks.popupMsg(popupColor,"3",popupTitle,"Velkommen til EmilOS!","Klik for at starte")
-	os.pullEvent("mouse_click")
-	if updated then
-		if emilworks.popupMsg(popupColor,"6",popupTitle,"Importer gamle","indstillinger?") then
-			file = fs.open("System/settings","w")
-			file.write(textutils.serialize(settings))
-			file.close()
-			emilworks.popupMsg(popupColor,"3",popupTitle,"EmilOS er nu opdateret!","Systemet vil nu","genstarte")
-			fs.delete("System/oldSettings")
-			sleep(2)
-			os.reboot()
-		else
-			settings = {}
+ --Functions
+local function printCentered(text, y)
+    local w, h = term.getSize()
+    x = math.ceil(math.ceil((w / 2) - (#text / 2)), 0)+1
+    term.setCursorPos(x, y)
+    print(text)
+end
+local function getYN()
+	while true do
+		local e, par1 = os.pullEventRaw("key")
+		if par1 == keys.y then
+			return true
+		elseif par1 == keys.n then
+			return false
 		end
 	end
-	local name = emilworks.popupMsg(popupColor,"4",popupTitle,"Hvad er dit navn?")
-	local password = emilworks.popupMsg(popupColor,"5",popupTitle,"Vaelg et kodeord","(Tom for ingen kode)")
+end
+if not term.isColor() then
+	term.setTextColor(colors.white)
+	term.clear()
+	term.setCursorPos(1,1)
+	print("EmilOS requires an advanced computer")
+	return
+end
+
+term.setBackgroundColor(colors.white)
+term.setTextColor(colors.black)
+term.clear()
+term.setCursorPos(24,9)
+write("EmilOS")
+
+ --Run a file check
+for k,v in pairs(checkFileList) do
+	if not fs.exists(v) then
+		fileNotFound = v
+	end
+end
+
+ --If there's a missing file, abort boot and show error screen
+if fileNotFound then
+	term.setCursorPos(23,9)
+	write("   ?   ")
+	term.setTextColor(colors.gray)
+	printCentered(langStrings.missingfile..fileNotFound,13)
+	term.setTextColor(colors.lightGray)
+	printCentered(langStrings.missingfile2,15)
+	term.setTextColor(colors.gray)
+	while true do
+		local e, par1 = os.pullEventRaw("key")
+		if par1 == keys.r then
+			if fs.exists("disk") then
+				if fs.exists("disk/install/"..fileNotFound) then
+					paintutils.drawLine(1,13,51,13,colors.white)
+					printCentered(langStrings.repair_copyingfile..fileNotFound,13)
+					fs.copy("disk/install/"..fileNotFound,fileNotFound)
+					sleep(0.5)
+					paintutils.drawLine(1,13,51,13,colors.white)
+					printCentered(langStrings.repair_copiedfile,13)
+					sleep(2)
+					os.reboot()
+				else
+					paintutils.drawLine(1,13,51,13,colors.white)
+					printCentered(langStrings.repair_filenotfound..fileNotFound,13)
+				end
+			else
+				paintutils.drawLine(1,13,51,13,colors.white)
+				printCentered(langStrings.repair_nodisk,13)
+			end
+			sleep(1)
+			paintutils.drawLine(1,13,51,13,colors.white)
+			printCentered(langStrings.missingfile..fileNotFound,13)
+		elseif par1 == keys.s then
+			sleep(0.05)
+			term.setBackgroundColor(colors.black)
+			term.setTextColor(colors.white)
+			term.clear()
+			term.setCursorPos(1,1)
+			return
+		end
+	end
+end
+os.loadAPI("System/emilworks")
+os.loadAPI("System/framework")
+
+ -- Generate a unique instance ID
+_G._EMILOS_INSTANCE = emilworks.hash(version.." "..os.time().." "..os.day())
+
+os.startTimer(1)
+
+ --Boot screen
+while true do
+	local e, par1, par2, par3 = os.pullEventRaw()
+	if e == "timer" then
+		break
+	elseif e == "key" then
+		if par1 == keys.s then
+			term.setBackgroundColor(colors.black)
+			term.clear()
+			term.setTextColor(colors.white)
+			term.setCursorPos(1,1)
+			printCentered("--- EmilOS Single-User Mode ---",1)
+			sleep(0.2)
+			if settings.password and fs.exists("System/sha") then
+				os.loadAPI("System/sha")
+				write("Password:")
+				while true do
+					local input = read("*")
+					if sha.sha256(input) == settings.password then
+						print("Password Accepted")
+						print("")
+						break
+					else
+						sleep(1)
+						print("Wrong password")
+						write("Password:")
+					end
+				end
+			end
+			return
+		elseif par1 == keys.r then
+			while true do
+				term.setBackgroundColor(colors.black)
+				term.clear()
+				term.setTextColor(colors.white)
+				term.setCursorPos(1,1)
+				printCentered("--- EmilOS Recovery mode ---",1)
+				print("")
+				printCentered("What would you like to do?",3)
+				print("[1] Reset personal settings")
+				print("[2] Reset EmilOS to factory settings")
+				print("[3] Wipe computer")
+				print("")
+				print("[4] Reboot computer")
+				while true do
+					e, key = os.pullEventRaw("key")
+					if key == keys.one or key == keys.two or key == keys.three then
+						print("Are you sure? [y/n]")
+						if getYN() then
+							if settings.password and fs.exists("System/sha") then
+								print("Type your password:")
+								sleep(0.05)
+								os.loadAPI("System/sha")
+								while true do
+									local input = read(" ")
+									if sha.sha256(input) == settings.password then
+										break
+									else
+										sleep(1)
+										print("Wrong password")
+									end
+								end
+							end
+							if key == keys.one then
+								fs.delete("System/settings")
+								print("Settings deleted")
+								sleep(2)
+								os.reboot()
+								break
+							elseif key == keys.two or key == keys.three then
+								printError("WARNING! THIS ACTION IS IRREVERSIBLE!")
+								print("Do you want to continue? [y/n]")
+								if getYN() then
+									if key == keys.two then
+										for k,v in pairs(fs.list("System")) do
+											for i=1,#userFiles do
+												if userFiles[i] == v then
+													fs.delete("System/"..v)
+													print("Deleted System/"..v)
+												end
+											end
+										end
+										for k,v in pairs(fs.list("Apps")) do
+											if not fs.isDir("Apps/"..v) then
+												fs.delete("Apps/"..v)
+												print("Deleted Apps/"..v)
+											end
+										end
+										fs.delete("Apps/data")
+										print("Deleted all app data")
+										print("The computer will now reboot")
+										sleep(2)
+										os.reboot()
+									elseif key == keys.three then
+										print("Please type 'EmilOS' to continue")
+										sleep(0.05)
+										while true do
+											local input = io.read()
+											if input == "EmilOS" then
+												term.setBackgroundColor(colors.black)
+												term.clear()
+												term.setTextColor(colors.white)
+												printCentered("EmilOS will now be deleted.",7)
+												sleep(2)
+												printCentered("Goodbye.",9)
+												sleep(5)
+												pcall(shell.run,"rm *")
+												os.reboot()
+											end
+										end
+									end
+								end
+							end
+						else
+							doRedraw = true
+							break
+						end
+					elseif key == keys.four then
+						os.reboot()
+					end
+					if doRedraw then
+						doRedraw = false
+						break
+					end
+				end
+			end
+		elseif par1 == keys.v then
+			verbose = true
+			term.setCursorPos(43,19)
+			write("Safe Mode")
+		end
+	end
+end
+if not settings.noAnim then
+	firstTime = true
+	for i=24,3,-3 do
+		if not firstTime then
+			sleep(0.05)
+		else
+			firstTime = false
+		end
+		term.setCursorPos(i,9)
+		write("EmilOS   ")
+	end
+	firstTime = true
+	for i=9,1,-2 do
+		if not firstTime then
+			sleep(0.05)
+		else
+			firstTime = false
+		end
+		term.setCursorPos(3,i)
+		write("EmilOS")
+		term.setCursorPos(3,i + 2)
+		write("       ")
+	end
+end
+if settings.topBarColor then
+	paintutils.drawLine(1,1,51,1,colors[settings.topBarColor])
+	term.setTextColor(colors[settings.topBarTextColor] or colors.black)
+end
+term.setCursorPos(3,1)
+write("EmilOS")
+
+ --If no settings file exists, assume first boot, or if oldSettings file exists, assume an update has been performed.
+if firstTimeBoot then
+	settings.background = "gray"
+	emilworks.popupMsg(colors.lime,"3","",langStrings.firstboot_welcome,langStrings.firstboot_clicktostart,nil,nil,true)
+	os.pullEvent("mouse_click")
+	while true do
+		local langs = {}
+		for k,v in pairs(fs.list("System/lang/")) do
+			table.insert(langs,v)
+		end
+		local langPackName = emilworks.popupMsg(colors.lime,"10","","Choose Language",langs,nil,nil,true)
+		settings.langPack = langPackName
+		file = fs.open("System/lang/"..settings.langPack,"r")
+		_G.langStrings = textutils.unserialize(file.readAll())
+		file.close()
+		if emilworks.popupMsg(colors.lime,"6","",langStrings.firstboot_uselang,nil,nil,nil,true) then
+			break
+		end
+	end
+	if updated then
+		if emilworks.popupMsg(colors.lime,"6","",langStrings.firstboot_import,langStrings.firstboot_import2,nil,nil,true) then
+			emilworks.popupMsg(colors.lime,"3","",langStrings.firstboot_updatesuccess,langStrings.firstboot_success2,langStrings.firstboot_success3,nil,true)
+			fs.move("System/oldSettings","System/settings")
+			sleep(2)
+			os.reboot()
+		end
+	end
+	local name = emilworks.popupMsg(colors.lime,"4","",langStrings.firstboot_selectname,nil,nil,nil,true)
+	local password = emilworks.popupMsg(colors.lime,"5","",langStrings.firstboot_selectpassword,langStrings.firstboot_enterfornopass,nil,nil,true)
 	settings.user = name
 	if password:len() >= 1 then
 		settings.password = emilworks.hash(password)
 	end
-	if emilworks.popupMsg(popupColor,"6",popupTitle,"Skift Server URL?") then
-		settings.serverUrl = emilworks.popupMsg(popupColor,"4",popupTitle,"Skriv Server URL")
+	if emilworks.popupMsg(colors.lime,"6","",langStrings.firstboot_changeserver,nil,nil,nil,true) then
+		settings.serverUrl = emilworks.popupMsg(colors.lime,"4","",langStrings.firstboot_writeserver,nil,nil,nil,true)
 	else
 		settings.serverUrl = "37.97.2.195"
 	end
-	settings.fullClock = not emilworks.popupMsg(popupColor,"6",popupTitle,"Brug 12-Timers Ur?")
-	settings.background = "gray"
-	if fs.exists("System/registerKey") then
+	settings.fullClock = not emilworks.popupMsg(colors.lime,"6","",langStrings.firstboot_use12hour,nil,nil,nil,true)
+	if not fs.exists("System/registerKey") then
+		if emilworks.popupMsg(colors.lime,"6","",langStrings.firstboot_activate,nil,nil,nil,true) then
+			sleep(0.05)
+			while true do
+				state, username = emilworks.authenticate(settings.serverUrl,true)
+				if state == true then
+					local a = http.get("http://"..settings.serverUrl.."/data/EmilOSRegister.php?action=checkUser&username="..username)
+					if a then
+						a = a.readAll()
+					end
+					if a == "no_key" then
+						while true do
+							b = emilworks.popupMsg(colors.lime,"4","",langStrings.firstboot_productcode,langStrings.firstboot_10chars,nil,nil,true)
+							if b:len() == 10 then
+								if emilworks.popupMsg(colors.lime,"6","",langStrings.firstboot_bindcodeto,langStrings.firstboot_bindcodeto2.." "..username.."?",nil,nil,true) then
+									emilworks.popupMsg(colors.lime,"3","",langStrings.firstboot_pleasewait,nil,nil,nil,true)
+									http.get("http://"..settings.serverUrl.."/data/EmilOSRegister.php?action=register&username="..username.."&key="..b)
+									break
+								end
+							end
+						end
+					elseif a ~= nil then
+						if emilworks.popupMsg(colors.lime,"6","",langStrings.firstboot_bindcomputerto,langStrings.firstboot_bindcomputerto2.." "..username.."?",nil,nil,true) then
+							b = a
+						else
+							b = nil
+						end
+					else
+						b = nil
+					end
+					if b then
+						settings.productKey = b
+						emilworks.popupMsg(colors.lime,"1","",langStrings.firstboot_isnowactivated,nil,nil,nil,true)
+						break
+					else
+						emilworks.popupMsg(colors.red,"1","",langStrings.firstboot_isnotactivated,nil,nil,nil,true)
+						break
+					end
+				elseif state == "cancel" then
+					break
+				end
+			end
+		end
+	else
 		file = fs.open("System/registerKey","r")
 		settings.productKey = file.readAll()
 		file.close()
 		fs.delete("System/registerKey")
-	else
-		settings.noAnim = true
 	end
+	settings.topBarColor = "white"
+	settings.topBarTextColor = "black"
+	settings.onBoot = {}
 	file = fs.open("System/settings","w")
 	file.write(textutils.serialize(settings))
 	file.close()
-	os.setComputerLabel(settings.user.."'s Computer")
-	emilworks.popupMsg(popupColor,"3",popupTitle,"Setup er faerdig!","Systemet vil nu","genstarte")
+	os.setComputerLabel(settings.user.."s Computer")
+	emilworks.popupMsg(colors.lime,"3","",langStrings.firstboot_setupdone,langStrings.firstboot_success2,langStrings.firstboot_success3,nil,true)
 	if fs.exists("System/oldSettings") then
 		fs.delete("System/oldSettings")
 	end
@@ -90,73 +406,56 @@ if firstTime then
 	os.reboot()
 end
 
-local oldPullEvent = os.pullEvent
-os.pullEvent = os.pullEventRaw
-
-while true do
-	if settings.password ~= nil then
-		local input = emilworks.popupMsg(popupColor,"5",popupTitle,"Indtast Kodeord")
-		if emilworks.hash(input) == settings.password then
+ --Check password and login
+local tries = 0
+if settings.password then
+	while true do
+		local psw = emilworks.hash(emilworks.popupMsg(colors.lime,"5","",langStrings.login_inputpassword,nil,nil,nil,true))
+		if psw == settings.password then
 			break
-		elseif input == "adminResetSettings" then
-			fs.delete("System/settings")
-			os.reboot()
 		else
-			emilworks.popupMsg(colors.red,"3",popupTitle,"Kodeord er forkert!")
+			emilworks.popupMsg(colors.red,"3","",langStrings.login_wrongpassword,nil,nil,nil,true)
 			sleep(1)
 			tries = tries + 1
 			if tries == 5 then
-				local timeLeft = 60
-				emilworks.popupMsg(popupColor,"3",popupTitle,"Computer er laast","Vent ")
+				local timeLeft = 30
+				emilworks.popupMsg(colors.lime,"3","",langStrings.login_locked,langStrings.login_wait.." ",nil,nil,true)
 				while true do
 					term.setCursorPos(19,8)
 					term.setTextColor(colors.black)
 					term.setBackgroundColor(colors.white)
-					write(timeLeft.." sekunder ")
+					write(timeLeft.." "..langStrings.login_seconds.." ")
 					timeLeft = timeLeft - 1
 					sleep(1)
 					if timeLeft == 0 then
+						tries = 0
 						break
 					end
 				end
 			end
 		end
-	else
-		break
 	end
 end
-os.pullEvent = oldPullEvent
-emilworks.popupMsg(popupColor,"3",popupTitle,"Velkommen, "..settings.user.."!")
-os.startTimer(2)
-while true do
-	e, par1, par2 = os.pullEvent()
-	if e == "key" then
-		if par1 == keys.s then
-			term.setBackgroundColor(colors.black)
-			term.clear()
-			term.setTextColor(colors.white)
-			term.setCursorPos(1,1)
-			print(" --- EmilOS Single-User Mode ---")
-			write("Loading APIs...")
-			os.loadAPI("System/emilworks")
-			os.loadAPI("System/framework")
-			sleep(0.2)
-			print("ok")
-			return
-		end
-	elseif e == "timer" then
-		break
-	end
-end
+
+ --Run EmilOS and catch exit codes. If none, then assume crash
 shell.run("EmilOS")
-timer = os.startTimer(0.05)
-while true do
-	e, par1 = os.pullEvent()
-	if e == "shutdown" then
-		os.shutdown()
-	elseif e == "timer" and par1 == timer then
-		emilworks.popupMsg(colors.lime,"3","EmilOS","En fejl opstod og","computeren vil","genstarte")
-		sleep(2)
-		os.reboot()
+if not verbose then
+	timer = os.startTimer(0.05)
+	while true do
+		e, par1 = os.pullEvent()
+		if e == "shutdown" then
+			os.shutdown()
+		elseif e == "reboot" then
+			os.reboot()
+		elseif e == "timer" and par1 == timer then
+			term.setBackgroundColor(colors.white)
+			term.setTextColor(colors.black)
+			term.clear()
+			printCentered(langStrings.hascrashed,9)
+			term.setTextColor(colors.gray)
+			printCentered(langStrings.hascrashed2,11)
+			sleep(2)
+			os.reboot()
+		end
 	end
 end

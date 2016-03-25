@@ -1,26 +1,37 @@
  --EmilOS App Store
-local version = 1.4
- --(c) 2015 Emil Inc. All Rights Reserved.
+local version = 1.6
+ --(c) 2016 Emil Inc. All Rights Reserved.
 
-bSystem = nil
+local bSystem = nil
 local selectedApp = nil
+local tArgs = nil
+tArgs = {...}
 _G.isGettingData = true
+
 setFile = fs.open("System/settings","r")
 local settings = textutils.unserialize(setFile.readAll())
 setFile.close()
 
+if not fs.exists("System/temp/appStoreIcons") then
+	fs.makeDir("System/temp/appStoreIcons")
+end
+
+if multishell then
+	multishell.setTitle(multishell.getCurrent(),langStrings.appstore_appname)
+end
+
  --Functions
 local function drawInterface()
 	term.setBackgroundColor(colors[settings.background])
-	term.setTextColor(colors.black)
+	term.setTextColor(colors[settings.topBarTextColor] or colors.black)
 	term.clear()
-	paintutils.drawLine(1,1,51,1,colors.white)
+	paintutils.drawLine(1,1,51,1,colors[settings.topBarColor])
 	term.setCursorPos(3,1)
-	write("App Butik")
+	write(langStrings.appstore_appname)
 	if isGettingData then
 		term.setCursorPos(13,1)
 		term.setTextColor(colors.lightGray)
-		write("*")
+		write("-")
 	end
 	term.setTextColor(colors.black)
 end
@@ -37,7 +48,7 @@ end
 local function drawInterface1()
 	term.setTextColor(colors.lightGray)
 	term.setCursorPos(4,3)
-	write("Navn    Inst.  Nyeste")
+	write(langStrings.appstore_listbar)
 	term.setCursorPos(3,4)
 	for i=1,23 do
 		write("-")
@@ -45,25 +56,23 @@ local function drawInterface1()
 	term.setTextColor(colors.black)
 end
 local function getAppList()
-	local a = http.post("http://"..settings.serverUrl.."/EmilOSScript.php","request="..textutils.urlEncode("GetAppList1"))
+	local a = http.post("http://"..settings.serverUrl.."/EmilOSScript.php","request=GetAppList1")
 	if a ~= nil then
 		AppList1 = textutils.unserialize(a.readLine())
 	else
-		emilworks.popupMsg(colors.lime,"3","App Butik","Server svarede ikke")
+		emilworks.popupMsg(colors.lime,"3","",langStrings.appstore_noresponse)
 		parallel.waitForAny(function() os.pullEvent("mouse_click") end,function() os.pullEvent("key") end)
 		return false
 	end
-	local b = http.post("http://"..settings.serverUrl.."/EmilOSScript.php","request="..textutils.urlEncode("GetAppList2"))
+	local b = http.post("http://"..settings.serverUrl.."/EmilOSScript.php","request=GetAppList2")
 	if a ~= nil then
 		AppList2 = textutils.unserialize(b.readLine())
 	else
-		emilworks.popupMsg(colors.lime,"3","App Butik","Server svarede ikke")
+		emilworks.popupMsg(colors.lime,"3","",langStrings.appstore_noresponse)
 		parallel.waitForAny(function() os.pullEvent("mouse_click") end,function() os.pullEvent("key") end)
 		AppList1 = nil
 		return false
 	end
-	--AppList1 = {["System"]="1.45",["Filer"]="1.61",["Paint"]="1.1",["Sktch"]="1.0",["Test"]="1.23"}
-	--AppList2 = {[1]="System",[2]="Filer",[3]="Paint",[4]="Sktch",[5]="Test"}
 end
 local function drawAppList()
 	outdatedApps = {}
@@ -109,7 +118,12 @@ local function drawAppList()
 end
 local function downloadApp(sApp)
 	if sApp ~= "System" then
-		emilworks.popupMsg(colors.lime,"3","App Butik","Henter App:",sApp)
+		if EmilOSBeta then
+			if not emilworks.popupMsg(colors.lime,"6","",langStrings.appstore_betawarning1,langStrings.appstore_betawarning2,langStrings.appstore_betawarning3,langStrings.appstore_betawarning4) then
+				return false
+			end
+		end
+		emilworks.popupMsg(colors.lime,"3","",langStrings.appstore_downloading.." "..sApp)
 		local data = http.get("http://"..settings.serverUrl.."/EmilOSApps/"..sApp)
 		if data ~= nil then
 			file = fs.open("Apps/"..sApp,"w")
@@ -119,20 +133,35 @@ local function downloadApp(sApp)
 			file = fs.open("System/installedApps","w")
 			file.write(textutils.serialize(installedApps))
 			file.close()
-			local iconData = http.get("http://"..settings.serverUrl.."/EmilOSApps/Icons/"..sApp)
+			if fs.exists("Apps/AppIcons/"..sApp) then
+				if not fs.isDir("Apps/AppIcons/"..sApp) then
+					fs.delete("Apps/AppIcons/"..sApp)
+					fs.makeDir("Apps/AppIcons/"..sApp)
+				end
+			else
+				fs.makeDir("Apps/AppIcons/"..sApp)
+			end
+			local iconData = http.get("http://"..settings.serverUrl.."/EmilOSApps/Icons/"..sApp.."New/oldImage")
 			if iconData ~= nil then
-				file = fs.open("Apps/AppIcons/"..sApp,"w")
+				file = fs.open("Apps/AppIcons/"..sApp.."/oldImage","w")
 				file.write(iconData.readAll())
 				file.close()
 			end
-			emilworks.popupMsg(colors.lime,"1","App Butik","App Hentet:",sApp)
+			iconData = nil
+			iconData = http.get("http://"..settings.serverUrl.."/EmilOSApps/Icons/"..sApp.."New/newImage")
+			if iconData ~= nil then
+				file = fs.open("Apps/AppIcons/"..sApp.."/newImage","w")
+				file.write(iconData.readAll())
+				file.close()
+			end
+			emilworks.popupMsg(colors.lime,"1","",langStrings.appstore_downloaded.." "..sApp)
 		else
-			emilworks.popupMsg(colors.lime,"3","App Butik","Fejl ved hentning:","Server svarede ikke")
+			emilworks.popupMsg(colors.lime,"3","",langStrings.appstore_errordownloading,langStrings.appstore_noresponse)
 			parallel.waitForAny(function() os.pullEvent("mouse_click") end,function() os.pullEvent("key") end)
 			return false
 		end
 	else
-		emilworks.popupMsg(colors.lime,"3","System Update","Henter SysUpd App...")
+		emilworks.popupMsg(colors.lime,"3","",langStrings.appstore_downloadingsysupd)
 		local data = http.get("http://"..settings.serverUrl.."/EmilOSApps/SysUpd")
 		if data ~= nil then
 			file = fs.open("Apps/SysUpd","w")
@@ -144,16 +173,16 @@ local function downloadApp(sApp)
 			file.close()
 			local iconData = http.get("http://"..settings.serverUrl.."/EmilOSApps/Icons/SysUpd")
 			if iconData ~= nil then
-				file = fs.open("Apps/AppIcons/SysUpd","w")
+				file = fs.open("Apps/AppIcons/SysUpd/oldImage","w")
 				file.write(iconData.readAll())
 				file.close()
 			end
-			if emilworks.popupMsg(colors.lime,"6","System Update","Hentede SysUpd App.","Installer nu?") then
+			if emilworks.popupMsg(colors.lime,"6","",langStrings.appstore_sysupddownloaded,langStrings.appstore_updatenow) then
 				shell.run("Apps/SysUpd")
 			end
 			bSystem = true
 		else
-			emilworks.popupMsg(colors.lime,"3","System Update","Fejl ved hentning:","Server svarede ikke")
+			emilworks.popupMsg(colors.lime,"3","",langStrings.appstore_errordownloading,langStrings.appstore_noresponse)
 			parallel.waitForAny(function() os.pullEvent("mouse_click") end,function() os.pullEvent("key") end)
 			return false
 		end
@@ -173,21 +202,34 @@ function drawAppDetails()
 		term.setCursorPos(29,6)
 		term.setBackgroundColor(colors.lightGray)
 		if outdatedApps[selectedApp] and fs.exists("Apps/"..selectedApp) then
-			buttonText = "Opdater"
+			buttonText = langStrings.appstore_buttonupdate
 		elseif installedApps[selectedApp] and  fs.exists("Apps/"..selectedApp) then
-			buttonText = "Slet"
+			buttonText = langStrings.appstore_buttondelete
 		else
-			buttonText = "Installer"
+			buttonText = langStrings.appstore_buttoninstall
 		end
 		write(" "..buttonText.." ")
+		if not fs.exists("System/temp/appStoreIcons/"..selectedApp) then
+			if not _HOST then
+				http.request("http://"..settings.serverUrl.."/EmilOSApps/Icons/"..selectedApp.."New/oldImage")
+			else
+				http.request("http://"..settings.serverUrl.."/EmilOSApps/Icons/"..selectedApp.."New/newImage")
+			end
+		else
+			if not _HOST then
+				local a = paintutils.loadImage("System/temp/appStoreIcons/"..selectedApp)
+				paintutils.drawImage(a,45,4)
+			elseif blittle then
+				local a = blittle.shrink(paintutils.loadImage("System/temp/appStoreIcons/"..selectedApp),colors.white)
+				blittle.draw(a,44,4)
+			end
+		end
 	else
 		write("EmilOS "..newSystemVersion)
-		if outdatedApps["System"] then
-			term.setCursorPos(29,6)
-			term.setBackgroundColor(colors.lightGray)
-			buttonText = "Hent"
-			write(" "..buttonText.." ")
-		end
+		term.setCursorPos(29,6)
+		term.setBackgroundColor(colors.lightGray)
+		buttonText = langStrings.appstore_buttonget
+		write(" "..buttonText.." ")
 	end
 end
 local function drawAllInterface()
@@ -212,31 +254,46 @@ if getAppList() == false then
 	os.queueEvent("appStore",false)
 	return
 end
+if tArgs[1] then
+	if tArgs[1] ~= "SysUpd" then
+		for i=1,#AppList2 do
+			if AppList2[i] == tArgs[1] then
+				os.queueEvent("mouse_click",1,4,4 + i)
+			end
+		end
+	else
+		os.queueEvent("mouse_click",1,4,5)
+	end
+end
 drawAllInterface()
 
 while true do
 	e, but, cx, cy = framework.eventHandler()
-	if e == "mouse_click" then
-		if cx >= 3 and cx <= 11 and cy == 1 then
+	if e == "mouse_click" or e == "key" and but == keys.leftCtrl then
+		if e == "key" then
+			cx, cy = 0, 0
+		end
+		if cx >= 3 and cx <= langStrings.appstore_appname:len() + 2 and cy == 1 or e == "key" and but == keys.leftCtrl then
 			term.setCursorPos(2,1)
-			term.setBackgroundColor(colors.lightBlue)
+			term.setBackgroundColor(colors[settings.menuHighlight] or colors.lightBlue)
 			term.setTextColor(colors.white)
-			write(" App Butik ")
-			cB = framework.menu({"Om App Butik","br","Afslut"})
+			write(" "..langStrings.appstore_appname.." ")
+			cB = framework.menu({langStrings.appstoremenu_about,"br",langStrings.appstoremenu_exit})
 			if cB == 1 then
-				emilworks.popupMsg(colors.lime,"3","App Butik","App Butik "..version,"","(c) 2015 Emil Inc.")
+				emilworks.popupMsg(colors.lime,"3","",langStrings.appstore_appname.." "..version,"","(c) 2016 Emil Inc.")
 				parallel.waitForAny(function() os.pullEvent("mouse_click") end,function() os.pullEvent("key") end)
 				drawAllInterface()
 			elseif cB == 3 then
 				AppList1, AppList2 = nil, nil
+				fs.delete("System/temp/appStoreIcons")
 				return
 			else
 				drawAllInterface()
 			end
 			selectedApp = nil
 		elseif cx >= 29 and cx <= 31 + buttonText:len() and cy == 6 and selectedApp then
-			if buttonText == "Slet" then
-				if emilworks.popupMsg(colors.lime,"6","App Butik","Vil du slette "..selectedApp.."?") then
+			if buttonText == langStrings.appstore_buttondelete then
+				if emilworks.popupMsg(colors.lime,"6","","Vil du slette "..selectedApp.."?") then
 					fs.delete("Apps/"..selectedApp)
 					if fs.exists("Apps/AppIcons/"..selectedApp) then
 						fs.delete("Apps/AppIcons/"..selectedApp)
@@ -263,7 +320,7 @@ while true do
 					end
 					selectedApp = AppList2[i]
 					downloadAppVersion = AppList1[AppList2[i]]
-					paintutils.drawLine(3,cy,25,cy,colors.lightBlue)
+					paintutils.drawLine(3,cy,25,cy,colors[settings.menuHighlight] or colors.lightBlue)
 					term.setTextColor(colors.white)
 					term.setCursorPos(4,4 + i)
 					if AppList2[i] ~= "System" then	
@@ -287,7 +344,22 @@ while true do
 				end
 			end
 		end
-	elseif e == "framework_redraw" then
+	elseif e == "http_success" then
+		file = fs.open("System/temp/appStoreIcons/"..selectedApp,"w")
+		file.write(cx.readAll())
+		file.close()
+		if not _HOST then
+			local a = paintutils.loadImage("System/temp/appStoreIcons/"..selectedApp)
+			paintutils.drawImage(a,45,4)
+		elseif blittle then
+			local a = blittle.shrink(paintutils.loadImage("System/temp/appStoreIcons/"..selectedApp),colors.white)
+			blittle.draw(a,44,4)
+		end
+	elseif e == "framework_redraw" or e == "framework_fullRedraw" then
 		drawAllInterface()
+	elseif e == "frameworkCloseProgram" then
+		if multishell.getCount() == 1 then
+			drawAllInterface()
+		end
 	end
 end

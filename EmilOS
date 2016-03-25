@@ -1,26 +1,66 @@
  --EmilOS
-local version = 1.5
- --(c) 2015 Emil Inc. All Rights Reserved
+local version = 1.7
+ --(c) 2016 Emil Inc. All Rights Reserved
 
  --Locals
-local appX = {4,14,24,34,44,4,14,24,34,44}
+local appX = {5,15,25,35,45,5,15,25,35,45}
 local appY = {4,12}
 local nSidebarPage = 1
 local clicked = false
 local currentMessages = {}
 local newBoot = true
-_G.isEmilOS = true
+local appListNum = 10
+local currentAppList = {}
+_G.EmilOS = true
+_G._EMILOS_VERSION = version
 
  --Load APIs
 os.loadAPI("System/emilworks")
 os.loadAPI("System/framework")
+if _HOST and fs.exists("System/blittle") then
+	os.loadAPI("System/blittle")
+end
 
- --Load Settings
+ --Load Settings and run some startup scripts
 setFile = fs.open("System/settings","r")
 local settings = textutils.unserialize(setFile.readAll())
 setFile.close()
-framework.httpRequest("http://"..settings.serverUrl.."/EmilOSScript.php","request=GetAppList1")
-_G.isActivated = true
+
+if settings.productKey then
+	_G.isActivated = true
+else
+	framework.delayedMessage("EmilOS",langStrings.message_notactivated,langStrings.message_notactivated2,true)
+end
+if not settings.dontCheckOnStartup and isActivated then
+	framework.httpRequest("http://"..settings.serverUrl.."/EmilOSScript.php","request=GetAppList1")
+end
+if settings.openRednetOnBoot then
+	for k,v in pairs(rs.getSides()) do
+		if peripheral.getType(v) == "modem" then
+			rednet.open(v)
+		end
+	end
+end
+if fs.exists("System/customEvents") then
+	file = fs.open("System/customEvents","r")
+	_G.registeredEvents = textutils.unserialize(file.readAll())
+	file.close()
+else
+	_G.registeredEvents = {}
+end
+_G.customFunctions = {}
+if settings.onBoot then
+	for i=1,#settings.onBoot do
+		if fs.exists("Apps/"..settings.onBoot[i]) then
+			shell.run("Apps/"..settings.onBoot[i],"onBoot")
+		end
+	end
+else
+	settings.onBoot = {}
+	file = fs.open("System/settings","w")
+	file.write(textutils.serialize(settings))
+	file.close()
+end
 
  --Functions
 local function getInstalledApps()
@@ -33,32 +73,55 @@ local function getInstalledApps()
 	if fs.exists("disk") then
 		table.insert(loadedApps,"Disk")
 	end
+	for k,v in pairs(rs.getSides()) do
+		if disk.hasAudio(v) then
+			table.insert(loadedApps,"CD")
+		end
+	end
 end
 local function drawMainBar()
-	paintutils.drawLine(1,1,51,1,colors.white)
+	paintutils.drawLine(1,1,51,1,colors[settings.topBarColor] or colors.white)
 	term.setCursorPos(3,1)
-	term.setTextColor(colors.black)
+	term.setTextColor(colors[settings.topBarTextColor] or colors.black)
 	write("EmilOS")
 	term.setCursorPos(11,1)
-	if isGettingData then
-		term.setTextColor(colors.lightGray)
-	elseif serverNotReachable then
-		term.setTextColor(colors.red)
-	end
 	if isActivated then
-		term.setTextColor(colors.black)
-		write("*")
+		if isGettingData then
+			term.setTextColor(colors.lightGray)
+			write("-")
+		elseif _G.EmilOSServerUnreachable then
+			term.setTextColor(colors.red)
+			write("*")
+		else
+			term.setTextColor(colors[settings.topBarTextColor] or colors.black)
+			write("*")
+		end
 	end
-	paintutils.drawLine(30,1,48,1,colors.white)
+	paintutils.drawLine(30,1,48,1,colors[settings.topBarColor] or colors.white)
 	term.setCursorPos(48 - textutils.formatTime(os.time(),settings.fullClock):len(),1)
-	term.setBackgroundColor(colors.white)
-	term.setTextColor(colors.black)
+	term.setTextColor(colors[settings.topBarTextColor] or colors.black)
 	write(textutils.formatTime(os.time(),settings.fullClock))
 	term.setCursorPos(50,1)
 	write("@")
 	term.setTextColor(colors.black)
 end
+local function drawClock()
+	if oldClock and oldClock ~= textutils.formatTime(os.time(),settings.fullClock) then
+		paintutils.drawLine(30,1,48,1,colors[settings.topBarColor] or colors.white)
+		term.setCursorPos(48 - textutils.formatTime(os.time(),settings.fullClock):len(),1)
+		term.setTextColor(colors[settings.topBarTextColor] or colors.black)
+		write(textutils.formatTime(os.time(),settings.fullClock))
+		oldClock = textutils.formatTime(os.time(),settings.fullClock)
+	else
+		oldClock = textutils.formatTime(os.time(),settings.fullClock)
+	end
+	ClockID = os.startTimer(0.2)
+end
 local function drawApps()
+	currentAppList = {}
+	for i=appListNum - 9, appListNum do
+		table.insert(currentAppList,loadedApps[i])
+	end
 	if newBoot or exitedProgram then
 		for i=1,18 do
 			paintutils.drawLine(1,i + 1,51,i + 1,colors[settings.background])
@@ -74,27 +137,71 @@ local function drawApps()
 			paintutils.drawLine(i,2,i,19,colors[settings.background])
 		end
 	end
-	for i=1,#loadedApps do
-		if loadedApps[i] ~= nil then
-			if fs.exists("Apps/AppIcons/"..loadedApps[i]) then
-				image = paintutils.loadImage("Apps/AppIcons/"..loadedApps[i])
+	for i=1,#currentAppList do
+		if currentAppList[i] ~= nil then
+			if fs.exists("Apps/AppIcons/"..currentAppList[i]) then
+				if not _HOST or not fs.exists("Apps/AppIcons/"..currentAppList[i].."/newImage") then
+					if fs.exists("Apps/AppIcons/"..currentAppList[i].."/oldImage") then
+						image = paintutils.loadImage("Apps/AppIcons/"..currentAppList[i].."/oldImage")
+					else
+						image = paintutils.loadImage("Apps/AppIcons/default")
+					end
+					if i <= 5 then
+						paintutils.drawImage(image,appX[i],appY[1])
+					else
+						paintutils.drawImage(image,appX[i],appY[2])
+					end
+				elseif _HOST and blittle then
+					local a = blittle.shrink(paintutils.loadImage("Apps/AppIcons/"..currentAppList[i].."/newImage"),colors[settings.background])
+					if i <= 5 then
+						blittle.draw(a,appX[i] - 1,appY[1])
+					else
+						blittle.draw(a,appX[i] - 1,appY[2])
+					end
+				end
 			else
 				image = paintutils.loadImage("Apps/AppIcons/default")
+				if i <= 5 then
+					paintutils.drawImage(image,appX[i],appY[1])
+				else
+					paintutils.drawImage(image,appX[i],appY[2])
+				end
 			end
-			if i <= 5 then
-				paintutils.drawImage(image,appX[i],appY[1])
-			else
-				paintutils.drawImage(image,appX[i],appY[2])
-			end
-			term.setBackgroundColor(colors[settings.background])
-			term.setTextColor(colors.white)
 			if i <= 5 then
 				term.setCursorPos(appX[i] - 1,appY[1] + 3)
 			else
 				term.setCursorPos(appX[i] - 1,appY[2] + 3)
 			end
-			write(loadedApps[i])
+			term.setBackgroundColor(colors[settings.background])
+			if settings.background ~= "white" then
+				term.setTextColor(colors.white)
+			else
+				term.setTextColor(colors.black)
+			end
+			if currentAppList[i]:len() <= 3 then
+				local x, y = term.getCursorPos()
+				term.setCursorPos(x + 1,y)
+			end
+			write(currentAppList[i])
 		end
+	end
+	if appListNum ~= 10 then
+		term.setCursorPos(1,10)
+		if settings.background ~= "white" then
+			term.setTextColor(colors.white)
+		else
+			term.setTextColor(colors.black)
+		end
+		write("<")
+	end
+	if #loadedApps > appListNum then
+		term.setCursorPos(51,10)
+		if settings.background ~= "white" then
+			term.setTextColor(colors.white)
+		else
+			term.setTextColor(colors.black)
+		end
+		write(">")
 	end
 end
 local function drawMain()
@@ -103,33 +210,59 @@ local function drawMain()
 	drawMainBar()
 	drawApps()
 end
+function round(num, idp)
+	local mult = 10^(idp or 0)
+	return math.floor(num * mult + 0.5) / mult
+end
 local function showContext()
-	if cx <= 42 then
-		conX, conY = cx + 1, cy
+	if selectedApp == "Disk" then
+		if cx <= 42 then
+			conX, conY = cx + 1, cy
+		else
+			conX, conY = cx - 10,cy
+		end
 	else
-		conX, conY = cx - 10,cy
-	end
-	for i=0,3 do
-		paintutils.drawLine(conX,conY + i,conX + 9,conY + i,colors.white)
+		if cx <= 30 then
+			conX, conY = cx + 1, cy
+		else
+			conX, conY = cx - 17,cy
+		end
 	end
 	if selectedApp == "Disk" then
-		term.setTextColor(colors.black)
+		for i=0,3 do
+			paintutils.drawLine(conX,conY + i,conX + 9,conY + i,colors[settings.menuBackground] or colors.white)
+		end
+	else
+		if multishell then
+			for i=0,5 do
+				paintutils.drawLine(conX,conY + i,conX + 16,conY + i,colors[settings.menuBackground] or colors.white)
+			end
+		else
+			for i=0,4 do
+				paintutils.drawLine(conX,conY + i,conX + 16,conY + i,colors[settings.menuBackground] or colors.white)
+			end
+		end
+	end
+	if selectedApp == "Disk" then
+		term.setTextColor(colors[settings.menuText] or colors.black)
 		term.setCursorPos(conX + 1,conY + 1)
-		write("Start...")
+		write(langStrings.context_disk_start)
 		term.setCursorPos(conX + 1,conY + 2)
-		write("Skub Ud")
-		paintutils.drawLine(conX + 1,conY + 4,conX + 9,conY + 4,colors.black)
-		paintutils.drawLine(conX + 10,conY + 1,conX + 10,conY + 4,colors.black)
+		write(langStrings.context_disk_eject)
+		if not settings.dontDoMenuShadows then
+			paintutils.drawLine(conX + 1,conY + 4,conX + 9,conY + 4,colors.black)
+			paintutils.drawLine(conX + 10,conY + 1,conX + 10,conY + 4,colors.black)
+		end
 		while true do
 			e, but, cx, cy = framework.eventHandler()
 			if e == "mouse_click" then
 				if cx >= conX and cx <= conX + 9 and cy == conY + 1 and fs.exists("Apps/Filer") then
-					term.setBackgroundColor(colors.lightBlue)
+					paintutils.drawLine(conX,conY + 1,conX + 9,conY + 1,colors[settings.menuHighlight] or colors.lightBlue)
 					term.setTextColor(colors.white)
-					term.setCursorPos(conX,conY + 1)
-					write(" Start... ")
+					term.setCursorPos(conX + 1,conY + 1)
+					write(langStrings.context_disk_start)
 					sleep(0.2)
-					shell.run("Apps/Filer","disk","getFile")
+					shell.run("Apps/Filer","disk","getFile","program")
 					while true do
 						e, par1 = framework.eventHandler()
 						if e == "Filer" then
@@ -140,10 +273,10 @@ local function showContext()
 						end
 					end
 				elseif cx >= conX and cx <= conX + 9 and cy == conY + 2 then
-					term.setBackgroundColor(colors.lightBlue)
+					paintutils.drawLine(conX,conY + 2,conX + 9,conY + 2,colors[settings.menuHighlight] or colors.lightBlue)
 					term.setTextColor(colors.white)
-					term.setCursorPos(conX,conY + 2)
-					write(" Skub Ud  ")
+					term.setCursorPos(conX + 1,conY + 2)
+					write(langStrings.context_disk_eject)
 					sleep(0.2)
 					for k,v in pairs(rs.getSides()) do
 						if peripheral.getType(v) == "drive" then
@@ -157,56 +290,94 @@ local function showContext()
 					end
 				end
 				break
+			elseif e == "timer" and but == ClockID then
+				drawClock()
 			end
 		end
 	else
-		term.setTextColor(colors.black)
+		term.setTextColor(colors[settings.menuText] or colors.black)
 		term.setCursorPos(conX + 1,conY + 1)
-		write("Slet")
+		write(langStrings.context_delete)
 		term.setCursorPos(conX + 1,conY + 2)
 		if fs.exists("Apps/Filer") and fs.exists("Apps/data/"..selectedApp) then
 			dataDoesExist = true
 		else
-			term.setTextColor(colors.lightGray)
+			term.setTextColor(colors[settings.menuInactive] or colors.lightGray)
 			dataDoesExist = false
 		end
-		write("Data...")
-		paintutils.drawLine(conX + 1,conY + 4,conX + 9,conY + 4,colors.black)
-		paintutils.drawLine(conX + 10,conY + 1,conX + 10,conY + 4,colors.black)
+		write(langStrings.context_data)
+		term.setCursorPos(conX + 1,conY + 3)
+		term.setTextColor(colors[settings.menuText] or colors.black)
+		write(langStrings.context_appstore)
+		if multishell then
+			term.setCursorPos(conX + 1,conY + 4)
+			write(langStrings.context_openintab)
+		end
+		if not settings.dontDoMenuShadows then
+			if multishell then
+				paintutils.drawLine(conX + 1,conY + 6,conX + 16,conY + 6,colors.black)
+				paintutils.drawLine(conX + 17,conY + 1,conX + 17,conY + 6,colors.black)
+			else
+				paintutils.drawLine(conX + 1,conY + 5,conX + 16,conY + 5,colors.black)
+				paintutils.drawLine(conX + 17,conY + 1,conX + 17,conY + 5,colors.black)
+			end
+		end
 		while true do
 			e, but, cx, cy = framework.eventHandler()
 			if e == "mouse_click" then
-				if cx >= conX and cx <= conX + 9 and cy == conY + 1 then
-					term.setBackgroundColor(colors.lightBlue)
+				if cx >= conX and cx <= conX + 16 and cy == conY + 1 then
+					paintutils.drawLine(conX,conY + 1,conX + 16,conY + 1,colors[settings.menuHighlight] or colors.lightBlue)
 					term.setTextColor(colors.white)
-					term.setCursorPos(conX,conY + 1)
-					write(" Slet     ")
+					term.setCursorPos(conX + 1,conY + 1)
+					write(langStrings.context_delete)
 					sleep(0.2)
-					if emilworks.popupMsg(colors.lime,"6","EmilOS","Vil du slette "..selectedApp.."?") then
+					if emilworks.popupMsg(colors.lime,"6","",langStrings.context_popup_delete.." "..selectedApp.."?") then
 						fs.delete("Apps/"..selectedApp)
 						if fs.exists("Apps/AppIcons/"..selectedApp) then
 							fs.delete("Apps/AppIcons/"..selectedApp)
 						end
 						if fs.exists("Apps/data/"..selectedApp) then
-							if emilworks.popupMsg(colors.lime,"6","EmilOS",selectedApp.." har gemte data.","Slet disse?") then
+							if emilworks.popupMsg(colors.lime,"6","",selectedApp.." "..langStrings.context_popup_saveddata,langStrings.context_popup_saveddata2) then
 								fs.delete("Apps/data/"..selectedApp)
 							end
 						end
 						getInstalledApps()
 					end
-				elseif cx >= conX and cx <= conX + 9 and cy == conY + 2 and dataDoesExist then
-					term.setBackgroundColor(colors.lightBlue)
+				elseif cx >= conX and cx <= conX + 16 and cy == conY + 2 and dataDoesExist then
+					paintutils.drawLine(conX,conY + 2,conX + 16,conY + 2,colors[settings.menuHighlight] or colors.lightBlue)
 					term.setTextColor(colors.white)
-					term.setCursorPos(conX,conY + 2)
-					write(" Data...  ")
+					term.setCursorPos(conX + 1,conY + 2)
+					write(langStrings.context_data)
 					sleep(0.2)
 					shell.run("Apps/Filer","Apps/data/"..selectedApp)
+					sleep(0.05)
+				elseif cx >= conX and cx <= conX + 16 and cy == conY + 3 then
+					paintutils.drawLine(conX,conY + 3,conX + 16,conY + 3,colors[settings.menuHighlight] or colors.lightBlue)
+					term.setTextColor(colors.white)
+					term.setCursorPos(conX + 1,conY + 3)
+					write(langStrings.context_appstore)
+					sleep(0.2)
+					shell.run("System/Apps/appStore",selectedApp)
+					sleep(0.05)
+					getInstalledApps()
+				elseif cx >= conX and cx <= conX + 16 and cy == conY + 4 and multishell then
+					paintutils.drawLine(conX,conY + 4,conX + 16,conY + 4,colors[settings.menuHighlight] or colors.lightBlue)
+					term.setTextColor(colors.white)
+					term.setCursorPos(conX + 1,conY + 4)
+					write(langStrings.context_openintab)
+					sleep(0.2)
+					framework.clearPopup()
+					shell.openTab("Apps/"..selectedApp)
 				end
 				break
+			elseif e == "timer" and but == ClockID then
+				drawClock()
 			end
 		end
 	end
-	drawMain()
+	for i=conY,conY + 6 do
+		paintutils.drawLine(conX,i,conX + 17,i,colors[settings.background])
+	end
 end
 local function openSidebar(bSidebarIsOpen)
 	if not bSidebarIsOpen then
@@ -263,18 +434,64 @@ local function openSidebar(bSidebarIsOpen)
 	elseif nSidebarPage == 2 then
 		term.setTextColor(colors.white)
 		term.setCursorPos(38,3)
-		write("Enheder")
+		write(langStrings.sidebar_devices)
 		local writeY = 1
 		for k,v in pairs(rs.getSides()) do
 			if peripheral.getType(v) then
 				term.setCursorPos(38,4 + writeY)
-				if peripheral.getType(v) == "modem" and rednet.isOpen(v) then
-					write("modem (Aktiv)")
-				else
-					write(peripheral.getType(v))
+				local p = peripheral.getType(v)
+				write(string.sub(p,1,1):upper()..string.sub(p,2,13))
+				if p == "modem" then
+					term.setCursorPos(48,4 + writeY)
+					if rednet.isOpen(v) then
+						term.setBackgroundColor(colors.lime)
+						write("  ")
+						term.setBackgroundColor(colors.white)
+						write(" ")
+					else
+						term.setBackgroundColor(colors.white)
+						write(" ")
+						term.setBackgroundColor(colors.red)
+						write("  ")
+					end
+					modemPosY = 4 + writeY
+				elseif p == "drive" and disk.isPresent(v) then
+					term.setCursorPos(48,4 + writeY)
+					term.setBackgroundColor(colors.lightBlue)
+					if _HOST then
+						write(" \30 ")
+					else
+						write(" ^ ")
+					end
 				end
+				term.setBackgroundColor(colors.lightGray)			
+				term.setTextColor(colors.white)
 				writeY = writeY + 1
 			end
+		end
+	elseif nSidebarPage == 3 then
+		term.setTextColor(colors.white)
+		term.setCursorPos(38,3)
+		write(langStrings.sidebar_music)
+		term.setCursorPos(38,5)
+		cdIsPresent = nil
+		for k,v in pairs(rs.getSides()) do
+			if disk.isPresent(v) then
+				if disk.hasAudio(v) then
+					cdIsPresent = v
+				end
+			end
+		end
+		if cdIsPresent then
+			write(string.sub((disk.getAudioTitle(cdIsPresent) or langStrings.sidebar_unknown),1,13))
+			term.setCursorPos(40,7)
+			if _HOST then
+				write("\16   \143   \30")
+			else
+				write(">   O   ^")
+			end
+		else
+			write(langStrings.sidebar_nodisc)
 		end
 	end
 	term.setCursorPos(41,18)
@@ -294,21 +511,35 @@ local function openSidebar(bSidebarIsOpen)
 	end
 	write("o")
 end
+_G.customFunctions.EmilOS_UpdateFound = function()
+	shell.run("System/Apps/appStore System")
+end
 
- --On boot screen draw
+ -- On boot screen draw
 getInstalledApps()
 drawMain()
+ClockID = os.startTimer(0.2)
 
- --Main loop
+ -- Main loop
 while true do
 	if clicked then
 		drawMain()
+		ClockID = os.startTimer(0.2)
 		clicked = false
 	end
 	e, but, cx, cy = framework.eventHandler()
 	if e == "mouse_click" or e == "key" then
 		if e == "key" then
 			cx, cy = 0, 0
+			if but == keys.left and appListNum ~= 10 then
+				appListNum = appListNum - 10
+				exitedProgram = true
+				drawApps()
+			elseif but == keys.right and #loadedApps > appListNum then
+				appListNum = appListNum + 10
+				exitedProgram = true
+				drawApps()
+			end
 		end
 		if cx >= 3 and cx <= 8 and cy == 1 or e == "key" and but == keys.leftCtrl then
 			if _G.bPopup then
@@ -316,13 +547,16 @@ while true do
 			end
 			wasMenu = true
 			term.setCursorPos(2,1)
-			term.setBackgroundColor(colors.lightBlue)
+			term.setBackgroundColor(colors[settings.menuHighlight] or colors.lightBlue)
 			term.setTextColor(colors.white)
 			write(" EmilOS ")
-			cB = framework.menu({"Om EmilOS","br","Indstillinger","App Butik","Shell","br","Luk ned..."},nil,true)
+			cB = framework.menu({langStrings.emilosmenu_about,"br",langStrings.emilosmenu_settings,langStrings.emilosmenu_appstore,langStrings.emilosmenu_shell,"br",langStrings.emilosmenu_reboot,langStrings.emilosmenu_shutdown},nil,true)
 			if cB == 1 then
+				local pText, versionText = nil, nil
 				if _CC_VERSION then
 					pText = "ComputerCraft ".._CC_VERSION
+				elseif _HOST then
+					pText = string.sub(_HOST,1,18)
 				else
 					pText = "("..os.version()..")"
 				end
@@ -331,7 +565,7 @@ while true do
 				else
 					versionText = version
 				end
-				emilworks.popupMsg(colors.lime,"3","EmilOS","EmilOS "..versionText,pText,"","(c) 2015 Emil Inc.")
+				emilworks.popupMsg(colors.lime,"3","","EmilOS "..versionText,pText,"","(c) 2016 Emil Inc.")
 				parallel.waitForAny(function() os.pullEvent("mouse_click") end,function() os.pullEvent("key") end)
 				exitedProgram = true
 			elseif cB == 3 then
@@ -339,14 +573,13 @@ while true do
 				setFile = fs.open("System/settings","r")
 				settings = textutils.unserialize(setFile.readAll())
 				setFile.close()
-				framework.eventHandler(true)
 				exitedProgram = true
 			elseif cB == 4 then
 				if isActivated then
 					shell.run("System/Apps/appStore")
 					getInstalledApps()
 				else
-					emilworks.popupMsg(colors.lime,"1","EmilOS","Aktiver EmilOS for at","bruge App Butik")
+					emilworks.popupMsg(colors.lime,"1","","Aktiver EmilOS for at","bruge App Butik")
 				end
 				exitedProgram = true
 			elseif cB == 5 then
@@ -357,7 +590,13 @@ while true do
 				shell.run("rom/programs/shell")
 				exitedProgram = true
 			elseif cB == 7 then
-				if emilworks.popupMsg(colors.lime,"6","EmilOS","Vil du lukke ned nu?") == true then
+				if emilworks.popupMsg(colors.lime,"6","",langStrings.emilos_rebootnow) == true then
+					os.queueEvent("reboot")
+					return
+				end
+				exitedProgram = true
+			elseif cB == 8 then
+				if emilworks.popupMsg(colors.lime,"6","",langStrings.emilos_shutdownnow) == true then
 					os.queueEvent("shutdown")
 					return
 				end
@@ -367,28 +606,29 @@ while true do
 		elseif cx == 11 and cy == 1 then
 			if isActivated then
 				term.setCursorPos(10,1)
-				term.setBackgroundColor(colors.lightBlue)
+				term.setBackgroundColor(colors[settings.menuHighlight] or colors.lightBlue)
 				term.setTextColor(colors.white)
-				write(" * ")
+				write(" - ")
 				sleep(0.2)
-				serverNotReachable = false
+				_G.EmilOSServerUnreachable = false
 				if not isGettingData then
 					framework.httpRequest("http://"..settings.serverUrl.."/EmilOSScript.php","request=GetAppList1")
 				end
+				ClockID = os.startTimer(1)
 				drawMainBar()
 			end
-		elseif cx >= 49 and cx <= 51 and cy == 1 then
+		elseif cx >= 49 and cx <= 51 and cy == 1 or e == "key" and but == 157 then
 			if _G.bPopup then
 				drawApps()
 				_G.bPopup = false
 			end
 			term.setCursorPos(49,1)
-			term.setBackgroundColor(colors.lightBlue)
+			term.setBackgroundColor(colors[settings.menuHighlight] or colors.lightBlue)
 			term.setTextColor(colors.white)
 			write(" @ ")
 			openSidebar()
-			sidebar = true
-			while sidebar do
+			ClockID = os.startTimer(1)
+			while true do
 				e, but, cx, cy = framework.eventHandler()
 				if e == "mouse_click" then
 					if cx >= 37 then
@@ -418,6 +658,25 @@ while true do
 							currentMessages[3] = nil
 							framework.messageHandler("save")
 							openSidebar(true)
+						elseif cx >= 37 and cx <= 51 and cy == modemPosY and nSidebarPage == 2 then
+							for k,v in pairs(rs.getSides()) do
+								if peripheral.getType(v) == "modem" then
+									if rednet.isOpen(v) then
+										rednet.close(v)
+									else
+										rednet.open(v)
+									end
+								end
+							end
+							openSidebar(true)
+						elseif cx == 40 and cy == 7 and cdIsPresent then
+							disk.playAudio(cdIsPresent)
+						elseif cx == 44 and cy == 7 and cdIsPresent then
+							disk.stopAudio(cdIsPresent)
+						elseif cx == 48 and cy == 7 and cdIsPresent then
+							disk.eject(cdIsPresent)
+							cdIsPresent = nil
+							openSidebar(true)
 						end
 					else
 						if cy == 1 then
@@ -425,26 +684,88 @@ while true do
 						end
 						break
 					end
-				elseif e == "peripheral" or e == "peripheral_detach" then
-					if nSidebarPage == 2 then
+				elseif e == "peripheral" or e == "peripheral_detach" or e == "disk" or e == "disk_eject" then
+					if e == "peripheral" then
+						if peripheral.getType(but) == "modem" and settings.openRednetOnBoot then
+							rednet.open(but)
+						end
+					end
+					if nSidebarPage >= 2 then
 						openSidebar(true)
+					end
+					if e == "disk" then
+						if disk.hasAudio(but) then
+							table.insert(loadedApps,"CD")
+						else
+							table.insert(loadedApps,"Disk")
+						end
+						exitedProgram = true
+					elseif e == "disk_eject" then
+						for i=1,#loadedApps do
+							if loadedApps[i] == "Disk" or loadedApps[i] == "CD" then
+								table.remove(loadedApps,i)
+								cdIsPresent = nil
+							end
+						end
+						exitedProgram = true
+					end
+				elseif e == "timer" and but == ClockID then
+					drawClock()
+				elseif e == "key" then
+					if but == 157 then
+						break
+					elseif but == keys.right or but == keys.left then
+						if but == keys.right then
+							if nSidebarPage < 3 then
+								nSidebarPage = nSidebarPage + 1
+							end
+						else
+							if nSidebarPage > 1 then
+								nSidebarPage = nSidebarPage - 1
+							end
+						end
+						openSidebar(true)
+					end
+				elseif but == keys.delete and nSidebarPage == 1 then
+					if multishell.getCount() > 1 then
+						os.queueEvent("mouse_click",1,50,4)
+					else
+						os.queueEvent("mouse_click",1,50,3)
 					end
 				end
 			end
 			clicked = true
+		elseif cx == 1 and cy == 10 and appListNum ~= 10 then
+			appListNum = appListNum - 10
+			exitedProgram = true
+			drawApps()
+		elseif cx == 51 and cy == 10 and #loadedApps > appListNum then
+			appListNum = appListNum + 10
+			exitedProgram = true
+			drawApps()
 		else
-			for i=1,#loadedApps do
-				if cx >= appX[i] and cx <= appX[i] + 2 and cy >= 4 and cy <= 6 and i <= 5 then
-					selectedApp = loadedApps[i]
+			for i=1,#currentAppList do
+				if cx >= appX[i] and cx <= appX[i] + 2 and cy >= 4 and cy <= 7 and i <= 5 then
+					selectedApp = currentAppList[i]
 					if _G.bPopup then
 						_G.bPopup = false
 						drawApps()
 					end
-					if but == 2 then
+					if but == 2 and selectedApp ~= "CD" then
 						showContext()
-					elseif loadedApps[i] ~= "Disk" then
+					elseif selectedApp == "CD" then
+						nSidebarPage = 3
+						if multishell then
+							if multishell.getCount() > 1 then
+								os.queueEvent("mouse_click",1,50,2)
+							else
+								os.queueEvent("mouse_click",1,50,1)
+							end
+						else
+							os.queueEvent("mouse_click",1,50,1)
+						end
+					elseif selectedApp ~= "Disk" then
 						framework.clearPopup()
-						_G.appDataDir = "Apps/data/"..selectedApp
 						shell.run("Apps/"..selectedApp)
 						crashTimer = os.startTimer(0.05)
 						while true do
@@ -456,23 +777,42 @@ while true do
 								break
 							end
 						end
+						term.setCursorBlink(false)
+						if settings.openRednetOnBoot then
+							for k,v in pairs(rs.getSides()) do
+								if peripheral.getType(v) == "modem" then
+									rednet.open(v)
+								end
+							end
+						end
 					elseif fs.exists("Apps/Filer") then
 						framework.clearPopup()
 						shell.run("Apps/Filer","disk")
+						sleep(0.05)
 					end
 					exitedProgram, wasMenu = true, false
 					clicked = true
-				elseif cx >= appX[i] and cx <= appX[i] + 2 and cy >= 12 and cy <= 14 and i >= 6 and not clicked then
-					selectedApp = loadedApps[i]
+				elseif cx >= appX[i] and cx <= appX[i] + 2 and cy >= 12 and cy <= 15 and i >= 6 and not clicked then
+					selectedApp = currentAppList[i]
 					if _G.bPopup then
 						_G.bPopup = false
 						drawApps()
 					end
-					if but == 2 then
+					if but == 2 and selectedApp ~= "CD" then
 						showContext()
-					elseif loadedApps[i] ~= "Disk" then
+					elseif selectedApp == "CD" then
+						nSidebarPage = 3
+						if multishell then
+							if multishell.getCount() > 1 then
+								os.queueEvent("mouse_click",1,50,2)
+							else
+								os.queueEvent("mouse_click",1,50,1)
+							end
+						else
+							os.queueEvent("mouse_click",1,50,1)
+						end
+					elseif selectedApp ~= "Disk" then
 						framework.clearPopup()
-						_G.appDataDir = "Apps/data/"..selectedApp
 						shell.run("Apps/"..selectedApp)
 						crashTimer = os.startTimer(0.05)
 						while true do
@@ -484,40 +824,85 @@ while true do
 								break
 							end
 						end
+						term.setCursorBlink(false)
+						if settings.openRednetOnBoot then
+							for k,v in pairs(rs.getSides()) do
+								if peripheral.getType(v) == "modem" then
+									rednet.open(v)
+								end
+							end
+						end
 					elseif fs.exists("Apps/Filer") then
 						framework.clearPopup()
 						shell.run("Apps/Filer","disk")
+						sleep(0.05)
 					end
 					exitedProgram, wasMenu = true, false
 					clicked = true
 				end
 			end
 		end
+	elseif e == "mouse_drag" then
+		if not previousDrag then
+			if cx >= 49 then
+				previousDrag = true
+			end
+		else
+			if cx <= 48 then
+				os.queueEvent("key",157)
+				previousDrag = false
+			end
+		end
+	elseif e == "timer" and but == ClockID then
+		drawClock()
 	elseif e == "framework_redraw" then
-		wasMenu, exitedProgram = false, false
+		wasMenu, exitedProgram, bPopup = false, false, false
 		drawApps()
+	elseif e == "framework_fullRedraw" or e == "term_resize" then
+		exitedProgram = true
+		drawMain()
+	elseif e == "frameworkCloseProgram" then
+		if multishell.getCount() == 1 then
+			exitedProgram = true
+			drawMain()
+		end
+	elseif e == "peripheral" then
+		if peripheral.getType(but) == "modem" and settings.openRednetOnBoot then
+			rednet.open(but)
+		end
 	elseif e == "disk" then
-		table.insert(loadedApps,"Disk")
-		if fs.exists("disk/autorun") then
-			if emilworks.popupMsg(colors.lime,"6","EmilOS","Disken har et autorun","program. Vil du","koere dette?") then
-				shell.run("disk/autorun")
+		for k,v in pairs(rs.getSides()) do
+			if disk.isPresent(v) then
+				if not disk.hasAudio(v) then
+					table.insert(loadedApps,"Disk")
+					if fs.exists("disk/autorun") then
+						if emilworks.popupMsg(colors.lime,"6","",langStrings.emilos_autorundisk1,langStrings.emilos_autorundisk2,langStrings.emilos_autorundisk3) then
+							shell.run("disk/autorun")
+						end
+					end
+				else
+					table.insert(loadedApps,"CD")
+				end
+				exitedProgram = true
+				drawMain()
+				break
+			end
+		end
+	elseif e == "disk_eject" then
+		for i=1,#loadedApps do
+			if loadedApps[i] == "Disk" or loadedApps[i] == "CD" then
+				table.remove(loadedApps,i)
 			end
 		end
 		exitedProgram = true
 		drawMain()
-	elseif e == "disk_eject" then
-		for i=1,#loadedApps do
-			if loadedApps[i] == "Disk" then
-				table.remove(loadedApps,i)
-			end
-		end
-	elseif e == "http_success" then
+	elseif e == "http_success" and but == "http://"..settings.serverUrl.."/EmilOSScript.php" then
 		drawMainBar()
 		local versionTable = textutils.unserialize(cx.readAll())
 		if tonumber(versionTable.System) > version then
-			framework.message("EmilOS","Opdatering","fundet",true,"System/Apps/appStore")
+			framework.message("EmilOS",langStrings.message_update,langStrings.message_found,true,"EmilOS_UpdateFound")
 		elseif tonumber(versionTable.System) < version then
-			framework.message("EmilOS","Bruger Beta",version,true)
+			framework.message("EmilOS",langStrings.message_usingbeta,version,true,"System/Apps/appStore System","EmilOS_UpdateFound")
 			file = fs.open("System/installedApps","r")
 			local installedApps = textutils.unserialize(file.readAll())
 			file.close()
@@ -528,11 +913,10 @@ while true do
 			_G.EmilOSBeta = true
 			isRunningBeta = true
 		end
-	elseif e == "http_failure" then
+	elseif e == "http_failure" and but == "http://"..settings.serverUrl.."/EmilOSScript.php" then
 		_G.EmilOSServerUnreachable = true
-		serverNotReachable = true
 		drawMainBar()
-		framework.message("EmilOS","Server ikke","tilgaengelig",true)
+		framework.message("EmilOS",langStrings.message_servernot,langStrings.message_unreachable,true)
 	elseif e == "terminate" then
 		return
 	end

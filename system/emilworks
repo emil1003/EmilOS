@@ -1,6 +1,8 @@
---EmilWorks Version: 1.1 (for EmilOS)
+ --Emilworks (For EmilOS)
+local version = 1.11
+ --(c) 2016 Emil Inc. All Rights Reserved
 
-function popupMsg(color, mode, title, text1, text2, text3, text4)
+function popupMsg(color, mode, title, text1, text2, text3, text4, dontOverwriteTopBar)
 	if fs.exists("System/settings") then
 		setFile = fs.open("System/settings","r")
 		settings = textutils.unserialize(setFile.readAll())
@@ -12,88 +14,104 @@ function popupMsg(color, mode, title, text1, text2, text3, text4)
 	if not settings.background then
 		settings.background = "gray"
 	end
-	if title == nil or title:len() >= 25 then
-		clear()
-		error("Error in title")
+	local extraLen = 0
+	if mode == "10" then
+		extraLen = 3
 	end
-	term.setBackgroundColor(colors[settings.background])
-	term.clear()
+	mode = tostring(mode)
+	if dontOverwriteTopBar then
+		for i=2,19 do
+			paintutils.drawLine(1,i,51,i,colors[settings.background])
+		end
+	else
+		term.setBackgroundColor(colors[settings.background])
+		term.clear()
+	end
 	ynum = 0
 	yc = 0
-	if text2 ~= nil then
+	if mode == "7" then
+		ynum = -1
+	end
+	if text2 ~= nil and mode ~= "10" then
 		ynum = ynum + 1
 	end
-	if text3 ~= nil then
+	if text3 ~= nil and mode ~= "9" and mode ~= "10" then
 		ynum = ynum + 1
 	end
-	if text4 ~= nil then
+	if text4 ~= nil and mode ~= "9" and mode ~= "10" then
 		ynum = ynum + 1
 	end
 	if mode ~= "3" then
-		for i=1,5 + ynum do
+		for i=1,5 + ynum + extraLen do
 			paintutils.drawLine(13,6 + yc,38,6 + yc,colors.white)
 			yc = yc + 1
-			paintutils.drawLine(14,11 + ynum,39,11 + ynum,colors.black)
-			paintutils.drawLine(39,6,39,10 + ynum,colors.black)
 		end
+		paintutils.drawLine(14,11 + ynum + extraLen,39,11 + ynum + extraLen,colors.black)
+		paintutils.drawLine(39,6,39,10 + ynum + extraLen,colors.black)
 	else
 		for i=1,3 + ynum do
 			paintutils.drawLine(13,6 + yc,38,6 + yc,colors.white)
 			yc = yc + 1
-			paintutils.drawLine(14,9 + ynum, 39,9 + ynum,colors.black)
-			paintutils.drawLine(39,6,39,9 + ynum,colors.black)
 		end
+		paintutils.drawLine(14,9 + ynum, 39,9 + ynum,colors.black)
+		paintutils.drawLine(39,6,39,9 + ynum,colors.black)
 	end
-	if color ~= nil then
-		paintutils.drawLine(13,5,38,5,color)
-		term.setBackgroundColor(color)
-	else
-		clear()
-		error("Color not specified")
+	if not color then
+		color = colors.black
 	end
+	paintutils.drawLine(13,5,38,5,color)
+	term.setBackgroundColor(color)
 	term.setTextColor(colors.black)
 	term.setCursorPos(14,5)
 	print(title)
 	term.setCursorPos(14,7)
 	term.setBackgroundColor(colors.white)
 	print(text1)
-	if text2 ~= nil then
+	if text2 ~= nil and mode ~= "10" then
 		term.setCursorPos(14,8)
 		print(text2)
 	end
-	if text3 ~= nil then
+	if text3 ~= nil and mode ~= "9" and mode ~= "10" then
 		term.setCursorPos(14,9)
 		print(text3)
 	end
-	if text4 ~= nil then
+	if text4 ~= nil and mode ~= "9" and mode ~= "10" then
 		term.setCursorPos(14,10)
 		print(text4)
 	end
 	if mode == "1" then
-		paintutils.drawLine(32,9 + ynum,37,9 + ynum,colors.lightGray)
-		term.setCursorPos(34,9 + ynum)
+		term.setBackgroundColor(colors.lightGray)
+		term.setCursorPos(34 - langStrings.emilworks_ok:len(),9 + ynum)
 		term.setTextColor(colors.black)
-		print("OK")
+		print("  "..langStrings.emilworks_ok.."  ")
 		while true do
-			local e, but, cx, cy = os.pullEvent("mouse_click")
-			if cx >= 32 and cx <= 37 and cy == 9 + ynum then
-				break
+			local e, but, cx, cy = framework.eventHandler()
+			if e == "mouse_click" then
+				if cx >= 33 and cx <= 37 and cy == 9 + ynum then
+					break
+				end
+			elseif e == "key" then
+				if but == keys.space or but == keys.enter then
+					break
+				end
 			end
 		end
 	elseif mode == "2" then
-		paintutils.drawLine(14,9 + ynum,23,9 + ynum,colors.lightGray)
+		paintutils.drawLine(14,9 + ynum,22,9 + ynum,colors.lightGray)
 		paintutils.drawLine(32,9 + ynum,37,9 + ynum,colors.lightGray)
 		term.setTextColor(colors.black)
 		term.setCursorPos(16,9 + ynum)
-		print("Cancel")
+		print("Anuller")
 		term.setCursorPos(34,9 + ynum)
 		print("OK")
 		while true do
-			local e, but, cx, cy = os.pullEvent("mouse_click")
-			if cx >= 14 and cx <= 23 and cy == 9 + ynum then
-				return false
-			elseif cx >= 32 and cx <= 37 and cy == 9 + ynum then
-				return true
+			local e, but, cx, cy = framework.eventHandler()
+			if e == "mouse_click" then
+				if cx >= 14 and cx <= 22 and cy == 9 + ynum then
+					return false
+				elseif cx >= 32 and cx <= 37 and cy == 9 + ynum then
+					return true
+				end
 			end
 		end
 	elseif mode == "3" then
@@ -103,29 +121,143 @@ function popupMsg(color, mode, title, text1, text2, text3, text4)
 	elseif mode == "4" then
 		paintutils.drawLine(14,9 + ynum,37,9 + ynum,colors.lightGray)
 		term.setCursorPos(15,9 + ynum)
-		return io.read()
+		return framework.read()
 	elseif mode == "5" then
 		paintutils.drawLine(14,9 + ynum,37,9 + ynum,colors.lightGray)
 		term.setCursorPos(15,9 + ynum)
-		return read("*")
+		return framework.read("*")
 	elseif mode == "6" then
-		paintutils.drawLine(14,9 + ynum,19,9 + ynum,colors.lightGray)
-		paintutils.drawLine(31,9 + ynum,37,9 + ynum,colors.lightGray)
-		term.setCursorPos(16,9 + ynum)
-		print("Ja")
-		term.setCursorPos(33,9 + ynum)
-		print("Nej")
+		term.setBackgroundColor(colors.lightGray)
+		term.setCursorPos(14,9 + ynum)
+		print("  "..langStrings.emilworks_yes.."  ")
+		term.setCursorPos(34 - langStrings.emilworks_no:len(),9 + ynum)
+		print("  "..langStrings.emilworks_no.."  ")
 		while true do
-			local e, but, cx, cy = os.pullEvent("mouse_click")
-			if cx >= 14 and cx <= 20 and cy == 9 + ynum then
-				return true
-			elseif cx >= 32 and cx <= 37 and cy == 9 + ynum then
-				return false
+			local e, but, cx, cy = framework.eventHandler()
+			if e == "mouse_click" then
+				if cx >= 14 and cx <= 17 + langStrings.emilworks_yes:len() and cy == 9 + ynum then
+					return true
+				elseif cx >= 34 - langStrings.emilworks_no:len() and cx <= 37 and cy == 9 + ynum then
+					return false
+				end
+			elseif e == "key" then
+				if but == keys.y then
+					return true
+				elseif but == keys.n then
+					return false
+				end
 			end
 		end
-	else
-		clear()
-		error("Error in Mode")
+	elseif mode == "7" then
+		paintutils.drawLine(14,8,37,8,colors.lightGray)
+		paintutils.drawLine(14,11,37,11,colors.lightGray)
+		term.setCursorPos(15,8)
+		local line1 = framework.read()
+		term.setCursorPos(15,11)
+		local line2 = emilworks.hash(framework.read("*"))
+		return line1, line2
+	elseif mode == "8" then
+		term.setCursorPos(19,9 + ynum)
+		local colorList = {"white","orange","magenta","lightBlue","yellow","lime","pink","gray","lightGray","cyan","purple","blue","brown","green","red","black"}
+		for i=1,#colorList do
+			term.setBackgroundColor(colors[colorList[i]])
+			if colorList[i] == "white" then
+				write("-")
+			else
+				write(" ")
+			end
+		end
+		while true do
+			e, but, cx, cy = framework.eventHandler()
+			if e == "mouse_click" then
+				if cy == 9 + ynum then
+					if cx >= 19 and cx <= 34 then
+						for i=1,#colorList do
+							if cx == 18 + i then
+								term.setTextColor(colors.white)
+								return colorList[i]
+							end
+						end
+					end
+				end
+			end
+		end
+	elseif mode == "9" then
+		if text3 then
+			paintutils.drawLine(14,9 + ynum,15 + text3:len(),9 + ynum,colors.lightGray)
+			term.setCursorPos(15,9 + ynum)
+			write(text3)
+		end
+		if text4 then
+			paintutils.drawLine(37,9 + ynum,36 - text4:len(),9 + ynum,colors.lightGray)
+			term.setCursorPos(37 - text4:len(),9 + ynum)
+			write(text4)
+		end
+		while true do
+			e, but, cx, cy = framework.eventHandler()
+			if e == "mouse_click" then
+				if cx >= 14 and cx <= 15 + text3:len() and cy == 9 + ynum and text3 then
+					return 1
+				elseif cx >= 36 - text4:len() and cx <= 37 and cy == 9 + ynum and text4 then
+					return 2
+				end
+			end
+		end
+	elseif mode == "10" then
+		local function drawEnts()
+			for i=1,4 do
+				paintutils.drawLine(16,8 + ynum + i,35,8 + ynum + i,colors.lightGray)
+			end
+			term.setTextColor(colors.black)
+			for i=1,4 do
+				if text2[(i + current)] then
+					term.setCursorPos(17,8 + ynum + i)
+					write(text2[(i + current)])
+				end
+			end
+			term.setCursorPos(35,9 + ynum)
+			term.setTextColor(colors.lightGray)
+			if current > 0 then
+				term.setTextColor(colors.black)
+			end
+			write("\24")
+			term.setCursorPos(35,12 + ynum)
+			term.setTextColor(colors.lightGray)
+			if #text2 > 4 and current + 4 < #text2 then
+				term.setTextColor(colors.black)
+			end
+			write("\25")
+		end
+		current = 0
+		drawEnts()
+		while true do
+			e, but, cx, cy = framework.eventHandler()
+			if e == "mouse_click" or e == "key" then
+				if e == "key" then
+					cx, cy = 35, 0
+				end
+				if cx == 35 then
+					if cy == 9 + ynum or e == "key" and but == keys.up then
+						if current >= 1 then
+							current = current - 1
+						end
+					elseif cy == 12 + ynum or e == "key" and but == keys.down then
+						if #text2 > 4 then
+							if current + 4 ~= #text2 then
+								current = current + 1
+							end
+						end
+					end
+					drawEnts()
+				elseif cx >= 16 and cx <= 34 and cy >= 9 + ynum and cy <= 12 + ynum then
+					for i=1,4 do
+						if text2[((cy - (8 + ynum)) + current)] then
+							return text2[((cy - (8 + ynum)) + current)]
+						end
+					end
+				end
+			end
+		end
 	end
 end
 function hash(string)
@@ -133,4 +265,24 @@ function hash(string)
 	hash = sha.sha256(string)
 	os.unloadAPI("sha")
 	return hash
+end
+function authenticate(server,dontOverwriteTopBar)
+	local username, password = emilworks.popupMsg(colors.lime,"7","","Brugernavn","","","Adgangskode",dontOverwriteTopBar)
+	if username:len() == 0 then
+		return "cancel"
+	end
+	emilworks.popupMsg(colors.lime,"3","","Vent Venligst...",nil,nil,nil,dontOverwriteTopBar)
+	local a = http.post("http://"..server.."/login.php","request="..textutils.urlEncode(username))
+	if a then
+		a = a.readAll()
+		if a == password then
+			return true, username
+		else
+			emilworks.popupMsg(colors.red,"3","","Brugernavn eller","Adgangskode er","forkert",nil,dontOverwriteTopBar)
+			sleep(2)
+			return false
+		end
+	else
+		return false
+	end
 end
